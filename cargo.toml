@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "lib",
+    "interpreter",
+    "repl",
+    "greyscaletest"
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
