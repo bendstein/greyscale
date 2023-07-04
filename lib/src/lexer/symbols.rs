@@ -23,6 +23,8 @@ pub const STAR: &str = "*";
 pub const SLASH: &str = "/";
 pub const PERCENT: &str = "%";
 
+pub const B_SLASH: &str = "\\";
+
 pub const AMP: &str = "&";
 
 pub const PIPE: &str = "|";

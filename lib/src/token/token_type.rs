@@ -113,7 +113,9 @@ impl TokenType {
             TokenType::Identifier(_) => "ID".to_string(),
             TokenType::String(_, t) => format!("{}STR", match t {
                 StringType::Literal => "",
-                StringType::Interpolated => "I"
+                StringType::Interpolated => "I",
+                StringType::InterpolatedSegment => "ISEG",
+                StringType::Escaped => "ESC",
             }),
             TokenType::Number(_, b) => format!("{}NUM", match b {
                 Base::Binary => "b",
@@ -140,9 +142,9 @@ impl TokenType {
 
     pub fn as_program_string(&self, program: &GraphemeString) -> String {
         match self {
-            TokenType::Identifier(id) => program.substring(id),
-            TokenType::String(s, _) => program.substring(s),
-            TokenType::Number(n, _) => program.substring(n),
+            TokenType::Identifier(r) => program.substring(r),
+            TokenType::String(r, _) => program.substring(r),
+            TokenType::Number(r, _) => program.substring(r),
             _ => self.as_string()
         }
     }
@@ -185,5 +187,7 @@ lazy_static! {
 pub enum StringType {
     #[default]
     Literal,
-    Interpolated
+    Interpolated,
+    InterpolatedSegment,
+    Escaped
 }
