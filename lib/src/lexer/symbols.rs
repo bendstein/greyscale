@@ -33,6 +33,10 @@ pub const GREATER: &str = ">";
 
 pub const LESS: &str = "<";
 
+pub const B: &str = "b";
+pub const X: &str = "x";
+pub const UNDERSCORE: &str = "_";
+
 //Keywords
 pub const IF: &str = "if";
 pub const ELSE: &str = "else";

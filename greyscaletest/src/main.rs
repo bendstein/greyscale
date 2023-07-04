@@ -1,39 +1,29 @@
-use greyscale::{chunk::*, value::Value, vm::VirtualMachine, ops::Op};
+use greyscale::{util::string::GraphemeString, lexer::Lexer};
+use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let mut c = Chunk::default().with_name(Some("Test Chunk".to_string()));
+    let program_str = "";
+    let program = GraphemeString::new(program_str);
+    let lexer = Lexer::new(&program);
 
-    let constant = c.add_const(Value::Double(15_f64));
-
-    c.write(Op::Constant.into());
-    c.write(constant as u8);
-
-    let constant = c.add_const(Value::Double(13.4_f64));
-
-    c.write(Op::Constant.into());
-    c.write(constant as u8);
-
-    c.write(Op::Divide.into());
-
-    c.write(Op::Negate.into());
-
-    c.write(Op::Return.into());
-    
-    let mut vm = VirtualMachine::new(c);
-
-    match vm.execute() {
-        Ok(()) => {
-            
-        },
-        Err(e) => {
-            match e {
-                greyscale::vm::error::GreyscaleError::CompileErr(ce) => {
-                    println!("A compile error occurred: {ce}");
-                },
-                greyscale::vm::error::GreyscaleError::RuntimeErr(re) => {
-                    println!("A runtime error occurred: {re}");
-                },
+    for token_result in lexer {
+        match token_result {
+            Ok(token) => {
+                let content = token.get_value(&program);
+                println!("{}: ({}/{}..{}): {}", token.token_type().as_string(), token.line(), token.range().start, token.range().end, content);
+            },
+            Err(err) => {
+                match err {
+                    GreyscaleError::CompileErr(e) => {
+                        eprintln!("Compiler error: {e}")
+                    },
+                    GreyscaleError::RuntimeErr(e) => {
+                        eprintln!("Runtime error: {e}")
+                    }
+                }
             }
-        },
+        }
     }
+
+    println!("EOF");
 }

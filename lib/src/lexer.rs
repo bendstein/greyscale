@@ -1,3 +1,4 @@
+use crate::token::token_type::{Base, StringType};
 use crate::token::{Token, token_type::TokenType};
 use crate::util::string::GraphemeString;
 use crate::vm::error::GreyscaleError;
@@ -29,6 +30,8 @@ impl<'a> Lexer<'a> {
         // }
         
         pub fn scan_token(&mut self) -> Option<Result<Token, GreyscaleError>> {
+            self.start = self.current;
+
             if let Err(skip_err) = self.skip_comment_whitespace() {
                 return Some(Err(skip_err));
             }
@@ -50,9 +53,18 @@ impl<'a> Lexer<'a> {
                 symbols::DOT => Some(Ok(self.make_token(TokenType::Dot))),
                 symbols::COLON => Some(Ok(self.make_token(TokenType::Colon))),
                 symbols::SEMI => Some(Ok(self.make_token(TokenType::Semi))),
-                symbols::S_QUOTE => self.match_string(Some(c)),
-                symbols::D_QUOTE => self.match_string(Some(c)),
-                symbols::BACKTICK => self.match_interpolated_string(Some(c)),
+                symbols::S_QUOTE => {
+                    let _ = self.advance_n(-1);
+                    Some(self.match_string())
+                },
+                symbols::D_QUOTE => {
+                    let _ = self.advance_n(-1);
+                    Some(self.match_string())
+                },
+                symbols::BACKTICK => {
+                    let _ = self.advance_n(-1);
+                    Some(self.match_string())
+                },
                 symbols::BANG => {
                     if self.match_symbol(symbols::EQUAL) {
                         return Some(Ok(self.make_token(TokenType::BangEqual)));
@@ -77,14 +89,6 @@ impl<'a> Lexer<'a> {
                 symbols::MINUS => {
                     if self.match_symbol(symbols::EQUAL) {
                         return Some(Ok(self.make_token(TokenType::MinusEqual)));
-                    }
-
-                    //Negative number literal
-                    if let Some(next) = self.peek() {
-                        if next.parse::<u8>().is_ok() {
-                            let _ = self.advance();
-                            return self.match_number(true, Some(next));
-                        }
                     }
                     
                     Some(Ok(self.make_token(TokenType::Minus)))
@@ -178,13 +182,10 @@ impl<'a> Lexer<'a> {
                     Some(Ok(self.make_token(TokenType::Less)))
                 },
                 _ => {
-                    if let Some(next) = self.peek() {
-
-                        //Number literal
-                        if next.parse::<u8>().is_ok() {
-                            let _ = self.advance();
-                            return self.match_number(false, Some(next));
-                        }
+                    //If number literal
+                    if Base::Decimal.digit_is_allowed(c) {
+                        let _ = self.advance_n(-1);
+                        return Some(self.match_number());
                     }
 
                     Some(Err(GreyscaleError::CompileErr(format!("Unexpected character '{}'", &self.current().unwrap_or_default()))))
@@ -220,14 +221,9 @@ impl<'a> Lexer<'a> {
             self.advance_n(1)
         }
         
-        fn advance_n(&mut self, n: usize) -> Option<&'a str> {
-            if self.is_at_end() {
-                None
-            }
-            else {
-                self.current += n;
-                self.current()
-            }
+        fn advance_n(&mut self, n: isize) -> Option<&'a str> {
+            self.current = self.current.checked_add_signed(n).unwrap_or(self.start);
+            self.current()
         }
 
         fn match_symbol(&mut self, symbol: &str) -> bool {
@@ -245,20 +241,144 @@ impl<'a> Lexer<'a> {
             }
         }
         
+        fn match_symbol_case_insensitive(&mut self, symbol: &str) -> bool {
+            if let Some(next) = self.peek() {
+                if next.eq_ignore_ascii_case(symbol) {
+                    self.advance();
+                    true
+                }
+                else {
+                    false
+                }
+            }
+            else {
+                false
+            }
+        }
+
         fn make_token(&self, token_type: TokenType) -> Token {
             Token::new(token_type, self.start..self.current, self.line)
         }
         
-        fn match_string(&mut self, start: Option<&str>) -> Option<Result<Token, GreyscaleError>> {
-            todo!()
+        fn match_string(&mut self) -> Result<Token, GreyscaleError> {
+            if let Some(open) = self.advance() {
+
+                let string_type = match open {
+                    symbols::D_QUOTE | symbols::S_QUOTE => Ok(StringType::Literal),
+                    symbols::BACKTICK => Ok(StringType::Interpolated),
+                    _ => Err(GreyscaleError::CompileErr("Invalid start of string.".to_string()))
+                }?;
+
+                let mut closed = false;
+
+                //Collect all symbols until the closing quote, of the same type as the open, is reached.
+                while let Some(next) = self.advance() {
+                    if next == open {
+                        closed = true;
+                        break;
+                    }
+                    else if matches!(next, "\n" | "\r\n") {
+                        self.line += 1;
+                    }
+                }
+
+                if !closed {
+                    Err(GreyscaleError::CompileErr("Unterminated string literal".to_string()))
+                }
+                else {
+                    Ok(self.make_token(TokenType::String(self.start..self.current, string_type)))
+                }
+            }
+            else {
+                Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+            }
         }
 
-        fn match_interpolated_string(&mut self, start: Option<&str>) -> Option<Result<Token, GreyscaleError>>  {
-            todo!()
-        } 
+        fn match_number(&mut self) -> Result<Token, GreyscaleError> {
+            //Match first digit
+            if let Some(next) = self.advance() {
+                let first_digit = next.parse::<u8>()
+                    .map_err(|_| GreyscaleError::CompileErr("Expected a digit".to_string()))?;              
 
-        fn match_number(&mut self, negative: bool, start: Option<&str>) -> Option<Result<Token, GreyscaleError>> {
-            todo!()
+                let mut seen_digit = false;
+
+                //If first digit is 0, it could be part of the base prefix
+                let base: Base = if first_digit == 0 {
+                    if self.match_symbol_case_insensitive(symbols::B) {
+                        Base::Binary
+                    }
+                    else if self.match_symbol_case_insensitive(symbols::X) {
+                        Base::Hexadecimal
+                    }
+                    else {
+                        seen_digit = true;
+                        Base::Decimal
+                    }
+                }
+                else {
+                    seen_digit = true;
+                    Base::Decimal
+                };
+
+                let mut seen_dot = false;
+
+                while let Some(next) = self.peek() {
+                    //Any number of underscores allowed as visual separators.
+                    if next == symbols::UNDERSCORE {
+                        let _ = self.advance();
+                        continue;
+                    }
+
+                    //Match decimal point
+                    if next == symbols::DOT {
+                        //If a digit hasn't been seen yet, this is invalid
+                        if !seen_digit {
+                            let _ = self.advance();
+                            return Err(GreyscaleError::CompileErr("Expected a digit".to_string()));
+                        }
+
+                        //If next symbol is a digit, this is a decimal point
+                        if let Some(next) = self.peek_n(1) {
+                            if base.digit_is_allowed(next) {
+
+                                //Cannot have multiple decimal points
+                                if seen_dot {
+                                    let _ = self.advance();
+                                    return Err(GreyscaleError::CompileErr("Number cannot have multiple radix points.".to_string()));
+                                }
+
+                                seen_dot = true;
+                                seen_digit = true;
+                                let _ = self.advance_n(2);
+                                continue;
+                            }
+                        }
+
+                        //If there isn't a digit after the dot, not part of number. Stop.
+                        break;
+                    }
+
+                    //Match a valid digit
+                    if base.digit_is_allowed(next) {
+                        seen_digit = true;
+                        let _ = self.advance();
+                        continue;
+                    }
+
+                    //This is not part of a number. Stop.
+                    break;
+                }
+
+                if !seen_digit {
+                    Err(GreyscaleError::CompileErr("Expected a digit".to_string()))
+                }
+                else {
+                    Ok(self.make_token(TokenType::Number(self.start..self.current, base)))
+                }
+            }
+            else {
+                Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+            }
         }
 
         fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
@@ -270,11 +390,13 @@ impl<'a> Lexer<'a> {
                 //On whitespace character, advance
                 if next.is_empty() || matches!(next, " " | "\r" | "\t") {
                     self.advance();
+                    continue;
                 }
                 //On new line, increment line and advance
                 else if matches!(next, "\n" | "\r\n") {
                     self.line += 1;
                     self.advance();
+                    continue;
                 }
                 //If symbol is a slash, try to match a comment
                 else if next == symbols::SLASH {
@@ -331,8 +453,12 @@ impl<'a> Lexer<'a> {
                         if !terminated {
                             return Err(GreyscaleError::CompileErr("Unterminated comment".to_string()));
                         }
+
+                        continue;
                     }
                 }
+
+                break;
             }
 
             Ok(())

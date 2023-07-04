@@ -1,4 +1,4 @@
-use std::{ops::Range};
+use std::ops::Range;
 
 use crate::{lexer::symbols, util::string::GraphemeString};
 
@@ -41,11 +41,9 @@ pub enum TokenType {
 
     Identifier(Range<usize>),
 
-    String(Range<usize>),
+    String(Range<usize>, StringType),
 
-    InterpolatedString(Range<usize>),
-
-    Number(Range<usize>),
+    Number(Range<usize>, Base),
 
     //Keywords
     If, Else,
@@ -112,10 +110,16 @@ impl TokenType {
             TokenType::LessEqual => format!("{}{}", symbols::LESS, symbols::EQUAL),
             TokenType::LessLess => format!("{}{}", symbols::LESS, symbols::LESS),
             TokenType::LessLessEqual => format!("{}{}{}", symbols::LESS, symbols::LESS, symbols::EQUAL),
-            TokenType::Identifier(_) => String::new(),
-            TokenType::String(_) => String::new(),
-            TokenType::InterpolatedString(_) => String::new(),
-            TokenType::Number(_) => String::new(),
+            TokenType::Identifier(_) => "ID".to_string(),
+            TokenType::String(_, t) => format!("{}STR", match t {
+                StringType::Literal => "",
+                StringType::Interpolated => "I"
+            }),
+            TokenType::Number(_, b) => format!("{}NUM", match b {
+                Base::Binary => "b",
+                Base::Hexadecimal => "x",
+                Base::Decimal => ""
+            }),
             TokenType::If => symbols::IF.to_string(),
             TokenType::Else => symbols::ELSE.to_string(),
             TokenType::True => symbols::TRUE.to_string(),
@@ -137,10 +141,49 @@ impl TokenType {
     pub fn as_program_string(&self, program: &GraphemeString) -> String {
         match self {
             TokenType::Identifier(id) => program.substring(id),
-            TokenType::String(s) => program.substring(s),
-            TokenType::InterpolatedString(is) => program.substring(is),
-            TokenType::Number(n) => program.substring(n),
+            TokenType::String(s, _) => program.substring(s),
+            TokenType::Number(n, _) => program.substring(n),
             _ => self.as_string()
         }
     }
+}
+
+#[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum Base {
+    #[default]
+    Decimal,
+    Binary,
+    Hexadecimal
+}
+
+impl Base {
+    pub fn base_num(&self) -> u8 {
+        match self {
+            Base::Binary => 2,
+            Base::Decimal => 10,
+            Base::Hexadecimal => 16
+        }
+    }
+
+    pub fn allowed_digits(&self) -> &'static [&'static str] {
+        let digits = &*DIGITS;
+        &digits[0..self.base_num() as usize]
+    }
+
+    pub fn digit_is_allowed(&self, digit: &str) -> bool {
+        self.allowed_digits().contains(&digit.to_uppercase().as_str())
+    }
+}
+
+lazy_static! {
+    pub static ref DIGITS: Vec<&'static str> = vec![
+        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"
+    ];
+}
+
+#[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum StringType {
+    #[default]
+    Literal,
+    Interpolated
 }
