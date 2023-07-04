@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use crate::token::token_type::{Base, StringType};
 use crate::token::{Token, token_type::TokenType};
 use crate::util::string::GraphemeString;
@@ -196,11 +198,16 @@ impl<'a> Lexer<'a> {
             },
             _ => {
                 //If number literal
-                if Base::Decimal.digit_is_allowed(c) {
+                if Self::is_digit(c, Base::Decimal) {
                     let _ = self.advance_n(-1);
                     return Some(self.match_number());
                 }
-                
+                //If alpha, match identifier
+                else if Self::is_alpha(c) {
+                    let _ = self.advance_n(-1);
+                    return Some(self.match_identifier());
+                }
+
                 Some(Err(GreyscaleError::CompileErr(format!("Unexpected character '{}'", &self.current().unwrap_or_default()))))
             }
         }       
@@ -375,7 +382,7 @@ impl<'a> Lexer<'a> {
         //Match first digit
         if let Some(next) = self.advance() {
             let first_digit = next.parse::<u8>()
-            .map_err(|_| GreyscaleError::CompileErr("Expected a digit".to_string()))?;              
+                .map_err(|_| GreyscaleError::CompileErr("Expected a digit".to_string()))?;              
             
             let mut seen_digit = false;
             
@@ -416,7 +423,7 @@ impl<'a> Lexer<'a> {
                     
                     //If next symbol is a digit, this is a decimal point
                     if let Some(next) = self.peek_n(1) {
-                        if base.digit_is_allowed(next) {
+                        if Self::is_digit(next, base) {
                             
                             //Cannot have multiple decimal points
                             if seen_dot {
@@ -436,12 +443,12 @@ impl<'a> Lexer<'a> {
                 }
                 
                 //Match a valid digit
-                if base.digit_is_allowed(next) {
+                if Self::is_digit(next, base) {
                     seen_digit = true;
                     let _ = self.advance();
                     continue;
                 }
-                
+
                 //This is not part of a number. Stop.
                 break;
             }
@@ -458,6 +465,103 @@ impl<'a> Lexer<'a> {
         }
     }
     
+    fn match_identifier(&mut self) -> Result<Token, GreyscaleError> {
+        let start = self.current;
+
+        //Match first char
+        if let Some(next) = self.advance() {
+            if !Self::is_alpha(next) {
+                Err(GreyscaleError::CompileErr(format!("Unexpected symbol {next}")))
+            }
+            else {
+                while let Some(next) = self.peek() {
+                    if Self::is_alpha(next) || Self::is_digit(next, Base::Decimal) {
+                        let _ = self.advance();
+                    }
+                    else {
+                        break;
+                    }
+                }
+
+                if let Some(keyword) = self.get_keyword(start..self.current) {
+                    Ok(self.make_token(keyword))
+                }
+                else {
+                    Ok(self.make_token(TokenType::Identifier(start..self.current))) 
+                }
+            }
+        }
+        else {
+            Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+        }
+    }
+
+    fn get_keyword(&self, range: Range<usize>) -> Option<TokenType> {
+        let id = self.program.substring(&range);
+        let id = id.as_str();
+
+        match id {
+            symbols::IF => Some(TokenType::If),
+            symbols::ELSE => Some(TokenType::Else),
+            symbols::TRUE => Some(TokenType::True),
+            symbols::FALSE => Some(TokenType::False),
+            symbols::NULL => Some(TokenType::Null),
+            symbols::LOOP => Some(TokenType::Loop),
+            symbols::WHILE => Some(TokenType::While),
+            symbols::FOR => Some(TokenType::For),
+            symbols::CLASS => Some(TokenType::Class),
+            symbols::SUPER => Some(TokenType::Super),
+            symbols::THIS => Some(TokenType::This),
+            symbols::LET => Some(TokenType::Let),
+            symbols::FUNC => Some(TokenType::Func),
+            symbols::PRINT => Some(TokenType::Print),
+            symbols::RETURN => Some(TokenType::Return),
+            _ => None
+        }
+    }
+
+    fn is_digit(symbol: &str, base: Base) -> bool {
+        if symbol.is_empty() {
+            return false;
+        }
+        
+        let chars = symbol.chars().collect::<Vec<char>>();
+
+        if chars.len() != 1 {
+            false
+        }
+        else {
+            let c = *chars.first().unwrap();
+
+            match base {
+                Base::Binary => c == '0' || c == '1',
+                Base::Decimal => ('0'..='9').contains(&c),
+                Base::Hexadecimal => ('0'..='9').contains(&c)
+                    || ('a'..='f').contains(&c)
+                    || ('A'..='F').contains(&c)
+            }
+        }
+    }
+
+    fn is_alpha(symbol: &str) -> bool {
+        if symbol.is_empty() {
+            return false;
+        }
+
+        let chars = symbol.chars().collect::<Vec<char>>();
+
+        if chars.len() != 1 {
+            false
+        }
+        else {
+            let c = *chars.first().unwrap();
+
+            ('a'..='z').contains(&c)
+                || ('A'..='Z').contains(&c)
+                || c == '_'
+        }
+    }
+
     fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
         if self.is_at_end() {
             return Ok(());

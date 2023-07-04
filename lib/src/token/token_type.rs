@@ -158,31 +158,6 @@ pub enum Base {
     Hexadecimal
 }
 
-impl Base {
-    pub fn base_num(&self) -> u8 {
-        match self {
-            Base::Binary => 2,
-            Base::Decimal => 10,
-            Base::Hexadecimal => 16
-        }
-    }
-
-    pub fn allowed_digits(&self) -> &'static [&'static str] {
-        let digits = &*DIGITS;
-        &digits[0..self.base_num() as usize]
-    }
-
-    pub fn digit_is_allowed(&self, digit: &str) -> bool {
-        self.allowed_digits().contains(&digit.to_uppercase().as_str())
-    }
-}
-
-lazy_static! {
-    pub static ref DIGITS: Vec<&'static str> = vec![
-        "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"
-    ];
-}
-
 #[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum StringType {
     #[default]
