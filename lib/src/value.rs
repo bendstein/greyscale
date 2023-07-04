@@ -1,6 +1,6 @@
 use std::{slice::SliceIndex, ops::{Index, IndexMut}, fmt::Display};
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub enum Value {
     Double(f64)
 }

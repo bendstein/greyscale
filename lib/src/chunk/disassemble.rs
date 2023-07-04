@@ -51,9 +51,24 @@ impl Chunk {
         let op = Op::from(instr);
 
         match op {
-            Op::Return => self.disassemble_instr_simple(op, offset, f),
+            //Constant declarations
             Op::Constant => self.disassemble_instr_const(offset, f),
             Op::ConstantLong => self.disassemble_instr_const_long(offset, f),
+
+            //Keywords
+            Op::Return => self.disassemble_instr_simple(op, offset, f),
+
+            //Unary operators
+            Op::Negate => self.disassemble_instr_simple(op, offset, f),
+
+            //Binary operators
+            Op::Add => self.disassemble_instr_simple(op, offset, f),
+            Op::Subtract => self.disassemble_instr_simple(op, offset, f),
+            Op::Multiply => self.disassemble_instr_simple(op, offset, f),
+            Op::Divide => self.disassemble_instr_simple(op, offset, f),
+            Op::Modulus => self.disassemble_instr_simple(op, offset, f),
+
+            //Other
             Op::Unknown(_) => self.disassemble_instr_unknown(instr, offset, f)
         }
     }
@@ -97,7 +112,7 @@ impl Chunk {
     }
 
     fn disassemble_instr_unknown(&self, instr: u8, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("??{instr}\n"))?;
+        f.write_fmt(format_args!("{}\n", Op::Unknown(instr).name_padded()))?;
         Ok(offset + 1)
     }
     

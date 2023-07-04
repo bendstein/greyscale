@@ -1,76 +1,29 @@
-use greyscale::{chunk::*, vm::VirtualMachine};
+use greyscale::{chunk::*, value::Value, vm::VirtualMachine, ops::Op};
 
 fn main() {
     let mut c = Chunk::default().with_name(Some("Test Chunk".to_string()));
 
-    c.add_const(greyscale::value::Value::Double(15_f64));
-    c.add_const(greyscale::value::Value::Double(24_f64));
+    let constant = c.add_const(Value::Double(15_f64));
 
-    c.write(0);
-    c.write(0);
+    c.write(Op::Constant.into());
+    c.write(constant as u8);
 
-    c.write(0);
-    c.write(0);
+    let constant = c.add_const(Value::Double(13.4_f64));
 
-    c.write(0);
-    c.write(0);
+    c.write(Op::Constant.into());
+    c.write(constant as u8);
 
-    c.write(0);
-    c.write(0);
+    c.write(Op::Divide.into());
 
-    c.write(1);
-    c.write_u16(1);
+    c.write(Op::Negate.into());
 
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(0);
-    c.write(0);
-
-    c.write(2);
-    
-    c.metadata.new_line(2);
-    c.metadata.new_line(4);
-    c.metadata.new_line(8);
-    c.metadata.new_line(10);
-    c.metadata.new_line(12);
-    c.metadata.new_line(14);
-    c.metadata.new_line(16);
-    c.metadata.new_line(18);
-    c.metadata.new_line(20);
-    c.metadata.new_line(22);
-
-    println!("{c}");
+    c.write(Op::Return.into());
     
     let mut vm = VirtualMachine::new(c);
 
-    match vm.run() {
+    match vm.execute() {
         Ok(()) => {
-            println!("Ok");
+            
         },
         Err(e) => {
             match e {

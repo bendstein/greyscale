@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 lazy_static = { version = "1.4.0" }
 regex = { version = "1" }
+unicode-segmentation = { version = "1.9.0" }
 
 [lib]
 name = "greyscale"
