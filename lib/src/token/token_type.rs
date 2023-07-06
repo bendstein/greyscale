@@ -29,7 +29,10 @@ pub enum TokenType {
     Pipe, PipeEqual,
     PipePipe, PipePipeEqual,
 
-    Tilde, TildeEqual,
+    Caret, CaretEqual,
+    CaretCaret, CaretCaretEqual,
+
+    Tilde,
 
     Greater, GreaterEqual,
     GreaterGreater, GreaterGreaterEqual,
@@ -100,8 +103,11 @@ impl TokenType {
             TokenType::PipeEqual => format!("{}{}", symbols::PIPE, symbols::EQUAL),
             TokenType::PipePipe => format!("{}{}", symbols::PIPE, symbols::PIPE),
             TokenType::PipePipeEqual => format!("{}{}{}", symbols::PIPE, symbols::PIPE, symbols::EQUAL),
+            TokenType::Caret => symbols::CARET.to_string(),
+            TokenType::CaretEqual => format!("{}{}", symbols::CARET, symbols::EQUAL),
+            TokenType::CaretCaret => format!("{}{}", symbols::CARET, symbols::CARET),
+            TokenType::CaretCaretEqual => format!("{}{}{}", symbols::CARET, symbols::CARET, symbols::EQUAL),
             TokenType::Tilde => symbols::TILDE.to_string(),
-            TokenType::TildeEqual => format!("{}{}", symbols::TILDE, symbols::EQUAL),
             TokenType::Greater => symbols::GREATER.to_string(),
             TokenType::GreaterEqual => format!("{}{}", symbols::GREATER, symbols::EQUAL),
             TokenType::GreaterGreater => format!("{}{}", symbols::GREATER, symbols::GREATER),

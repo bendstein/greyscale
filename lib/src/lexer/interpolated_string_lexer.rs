@@ -382,7 +382,7 @@ impl<'a> InterpStringLexer<'a> {
         Ok(())
     }
 
-    fn is_at_end(&self) -> bool {
+    pub fn is_at_end(&self) -> bool {
         self.terminated ||
         self.current >= self.end || 
             self.current >= self.program.len()

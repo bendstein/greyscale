@@ -14,11 +14,19 @@ pub struct Lexer<'a> {
     current: usize,
     line: usize,
     end: usize,
-    program: &'a GraphemeString<'a>
+    program: GraphemeString<'a>
+}
+
+#[derive(Debug, Default, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+pub struct LexerState {
+    start: usize,
+    current: usize,
+    line: usize,
+    end: usize,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(program: &'a GraphemeString<'a>) -> Self {
+    pub fn new(program: GraphemeString<'a>) -> Self {
         Self {
             start: 0,
             current: 0,
@@ -28,22 +36,38 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn move_range(mut self, start: usize, end: usize, line: usize) -> Self {
-        self.start = start;
-        self.current = start;
-        self.end = end;
-        self.line = line;
+    pub fn with_state(mut self, state: LexerState) -> Self {
+        self.start = state.start;
+        self.current = state.start;
+        self.end = state.end;
+        self.line = state.line;
         self
     }
 
-    pub fn reset_range(mut self) -> Self {
+    pub fn with_reset_state(mut self) -> Self {
         self.start = 0;
         self.current = 0;
         self.end = self.program.len();
         self.line = 0;
         self
     }
+
+    pub fn set_state(&mut self, state: LexerState) {
+        self.start = state.start;
+        self.current = state.start;
+        self.end = state.end;
+        self.line = state.line;
+    }
         
+    pub fn get_state(&self) -> LexerState {
+        LexerState {
+            start: self.start,
+            current: self.current,
+            end: self.end,
+            line: self.line
+        }
+    }
+
     pub fn scan_token(&mut self) -> Option<Result<Token, GreyscaleError>> {
         self.start = self.current;
         
@@ -130,10 +154,6 @@ impl<'a> Lexer<'a> {
                 Some(Ok(self.make_token(TokenType::Percent)))
             },
             symbols::TILDE => {
-                if self.match_symbol(symbols::EQUAL) {
-                    return Some(Ok(self.make_token(TokenType::TildeEqual)));
-                }
-                
                 Some(Ok(self.make_token(TokenType::Tilde)))
             },
             symbols::AMP => {
@@ -166,6 +186,21 @@ impl<'a> Lexer<'a> {
                 
                 Some(Ok(self.make_token(TokenType::Pipe)))
             },
+            symbols::CARET => {
+                if self.match_symbol(symbols::EQUAL) {
+                    return Some(Ok(self.make_token(TokenType::CaretEqual)));
+                }
+                else if self.match_symbol(symbols::CARET) {
+                    
+                    if self.match_symbol(symbols::EQUAL) {
+                        return Some(Ok(self.make_token(TokenType::CaretCaretEqual)));
+                    }
+                    
+                    return Some(Ok(self.make_token(TokenType::CaretCaret)));
+                }
+                
+                Some(Ok(self.make_token(TokenType::Caret)))
+            },
             symbols::GREATER => {
                 if self.match_symbol(symbols::EQUAL) {
                     return Some(Ok(self.make_token(TokenType::GreaterEqual)));
@@ -197,7 +232,7 @@ impl<'a> Lexer<'a> {
                 Some(Ok(self.make_token(TokenType::Less)))
             },
             _ => {
-                //If number literal
+                //If numeric, match number literal
                 if Self::is_digit(c, Base::Decimal) {
                     let _ = self.advance_n(-1);
                     return Some(self.match_number());
@@ -213,6 +248,10 @@ impl<'a> Lexer<'a> {
         }       
     }
     
+    pub fn program(&self) -> &GraphemeString<'a> {
+        &self.program
+    }
+
     fn current(&self) -> Option<&'a str> {
         self.peek_n(-1)
     }
@@ -645,7 +684,7 @@ impl<'a> Lexer<'a> {
         Ok(())
     }
     
-    fn is_at_end(&self) -> bool {
+    pub fn is_at_end(&self) -> bool {
         self.current >= self.end || 
             self.current >= self.program.len()
     }
@@ -657,4 +696,149 @@ impl<'a> Iterator for Lexer<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         self.scan_token()
     }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct LexerIterWithHistoryItem {
+    pub state: LexerState,
+    pub token: Result<Token, GreyscaleError>
+}
+
+impl LexerIterWithHistoryItem {
+    pub fn new(state: LexerState, token: &Result<Token, GreyscaleError>) -> Self {
+        Self {
+            state,
+            token: token.clone()
+        }
+    }
+}
+
+pub struct LexerIterWithHistory<'a> {
+    lexer: Lexer<'a>,
+    history: Vec<Option<LexerIterWithHistoryItem>>,
+    n: usize
+}
+
+impl<'a> LexerIterWithHistory<'a> {
+    pub fn new(lexer: Lexer<'a>) -> Self {
+        Self {
+            lexer,
+            history: Vec::new(),
+            n: 0
+        }
+    }
+
+    pub fn zero(&mut self) {
+        self.n = 0;
+    }
+
+    pub fn clear(&mut self) {
+        self.history.clear();
+        self.n = 0;
+    }
+
+    pub fn current(&mut self) -> Option<LexerIterWithHistoryItem> {
+        if self.n < self.history.len() {
+            self.history[self.n].clone()
+        }
+        else {
+            self.lex()
+        }
+    }
+
+    pub fn current_token(&mut self) -> Option<Result<Token, GreyscaleError>> {
+        let maybe_item = self.current();
+
+        if let Some(item) = maybe_item {
+            Some(item.token)
+        }
+        else {
+            None
+        }
+    }
+
+    pub fn move_by(&mut self, n: isize) -> Option<LexerIterWithHistoryItem> {
+        let mut current = None;
+
+        let maybe_end = self.n.checked_add_signed(n);
+
+        let end = if let Some(e) = maybe_end {
+            e
+        }
+        else if n < 0 {
+            0
+        }
+        else {
+            self.history.len() 
+        };
+
+        if end > self.n {
+            for i in self.n..=end {
+                self.n = i;
+                current = Some(self.current()?);
+            }
+        }
+
+        current
+    }
+
+    pub fn peek(&mut self) -> Option<Result<Token, GreyscaleError>> {
+        self.peek_n(1)
+    }
+
+    pub fn peek_n(&mut self, n: isize) -> Option<Result<Token, GreyscaleError>> {
+        self.n.checked_add_signed(n)?;
+        let n_original = self.n;
+
+        let result = self.move_by(n);
+
+        self.n = n_original;
+
+        if let Some(item) = result {
+            Some(item.token)
+        }
+        else {
+            None
+        }
+    }
+
+    pub fn advance(&mut self) -> Option<LexerIterWithHistoryItem> {
+        self.move_by(1)
+    }
+    
+    pub fn rewind(&mut self) -> Option<LexerIterWithHistoryItem> {
+        self.move_by(-1)
+    }
+
+    pub fn program(&self) -> &GraphemeString<'a> {
+        self.lexer.program()
+    }
+
+    pub fn current_position(&self) -> usize {
+        self.n
+    }
+
+    pub fn set_position(&mut self, n: usize) {
+        self.n = n
+    }
+
+    pub fn is_at_end(&self) -> bool {
+        (self.n >= self.history.len() && self.lexer.is_at_end())
+            || (!self.history.is_empty() && self.history.last().unwrap().is_none())
+    }
+
+    fn lex(&mut self) -> Option<LexerIterWithHistoryItem> {
+        let current_state = self.lexer.get_state();
+        let scanned = self.lexer.scan_token();
+
+        if let Some(token) = scanned {
+            self.history.push(Some(LexerIterWithHistoryItem::new(current_state, &token)));
+            self.history.last().unwrap().clone()
+        }
+        else {
+            self.history.push(None);
+            None
+        }
+    }
+
 }

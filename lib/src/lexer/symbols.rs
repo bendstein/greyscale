@@ -29,6 +29,8 @@ pub const AMP: &str = "&";
 
 pub const PIPE: &str = "|";
 
+pub const CARET: &str = "^";
+
 pub const TILDE: &str = "~";
 
 pub const GREATER: &str = ">";

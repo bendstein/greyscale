@@ -4,24 +4,18 @@ use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, PartialOrd, Ord)]
 pub struct GraphemeString<'a> {
-    string: &'a str,
     graphemes: Vec<&'a str>
 }
 
-impl<'a> GraphemeString<'a> {
-    pub fn new(string: &'a str) -> Self {
+impl<'a, 'b: 'a> GraphemeString<'a> {
+    pub fn new(string: &'b str) -> Self {
         Self {
-            string,
             graphemes: UnicodeSegmentation::graphemes(string, true).collect()
         }
     }
 
     pub fn iter(&self) -> core::slice::Iter<&'a str> {
         self.graphemes.iter()
-    }
-
-    pub fn str(&self) -> &'a str {
-        self.string
     }
 
     pub fn char_at(&self, n: usize) -> &'a str {
