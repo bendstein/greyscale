@@ -248,6 +248,89 @@ impl<'a> Lexer<'a> {
         }       
     }
 
+    pub fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
+        if self.is_at_end() {
+            return Ok(());
+        }
+        
+        while let Some(next) = self.peek() {
+            //On whitespace character, advance
+            if next.is_empty() || matches!(next, " " | "\r" | "\t") {
+                self.advance();
+                continue;
+            }
+            //On new line, increment line and advance
+            else if matches!(next, "\n" | "\r\n") {
+                self.line += 1;
+                self.advance();
+                continue;
+            }
+            //If symbol is a slash, try to match a comment
+            else if next == symbols::SLASH {
+                //Determine whether this is a comment start by checking the symbol after the slash
+                if let Some(next) = self.peek_n(1) {
+                    let is_block;
+                    
+                    //Line comment; everything until a new line is reached is part of the comment
+                    if next == symbols::SLASH {
+                        let _ = self.advance_n(2);
+                        is_block = false;
+                    }
+                    //Block comment; everything until the terminating */ is reached is part of the comment
+                    else if next == symbols::STAR {
+                        let _ = self.advance_n(2);
+                        is_block = true;
+                    }
+                    else {
+                        break;
+                    }
+                    
+                    let mut terminated = false;
+                    
+                    //For each start of a block comment, increment. For each end, decrement.
+                    let mut block_count = 1;
+                    
+                    while let Some(next) = self.advance() {
+                        if matches!(next, "\n" | "\r\n") {
+                            self.line += 1;
+                            
+                            //If this is not a block comment, then the comment is finished
+                            if !is_block {
+                                terminated = true;
+                                break;
+                            }
+                        }
+                        else if next == symbols::SLASH && self.match_symbol(symbols::STAR) {
+                            //Increment block counter on /*
+                            block_count += 1;
+                        }
+                        else if next == symbols::STAR && self.match_symbol(symbols::SLASH) {
+                            //Decrement block counter on */
+                            block_count -= 1;
+                            
+                            //If this is a block comment, and the comment starts and ends have all
+                            //been paired, done
+                            if is_block && block_count == 0 {
+                                terminated = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if is_block && !terminated {
+                        return Err(GreyscaleError::CompileErr("Unterminated block comment".to_string()));
+                    }
+                    
+                    continue;
+                }
+            }
+            
+            break;
+        }
+        
+        Ok(())
+    }
+
     fn current(&self) -> Option<&'a str> {
         self.peek_n(-1)
     }
@@ -611,89 +694,6 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
-        if self.is_at_end() {
-            return Ok(());
-        }
-        
-        while let Some(next) = self.peek() {
-            //On whitespace character, advance
-            if next.is_empty() || matches!(next, " " | "\r" | "\t") {
-                self.advance();
-                continue;
-            }
-            //On new line, increment line and advance
-            else if matches!(next, "\n" | "\r\n") {
-                self.line += 1;
-                self.advance();
-                continue;
-            }
-            //If symbol is a slash, try to match a comment
-            else if next == symbols::SLASH {
-                //Determine whether this is a comment start by checking the symbol after the slash
-                if let Some(next) = self.peek_n(1) {
-                    let is_block;
-                    
-                    //Line comment; everything until a new line is reached is part of the comment
-                    if next == symbols::SLASH {
-                        let _ = self.advance_n(2);
-                        is_block = false;
-                    }
-                    //Block comment; everything until the terminating */ is reached is part of the comment
-                    else if next == symbols::STAR {
-                        let _ = self.advance_n(2);
-                        is_block = true;
-                    }
-                    else {
-                        break;
-                    }
-                    
-                    let mut terminated = false;
-                    
-                    //For each start of a block comment, increment. For each end, decrement.
-                    let mut block_count = 1;
-                    
-                    while let Some(next) = self.advance() {
-                        if matches!(next, "\n" | "\r\n") {
-                            self.line += 1;
-                            
-                            //If this is not a block comment, then the comment is finished
-                            if !is_block {
-                                terminated = true;
-                                break;
-                            }
-                        }
-                        else if next == symbols::SLASH && self.match_symbol(symbols::STAR) {
-                            //Increment block counter on /*
-                            block_count += 1;
-                        }
-                        else if next == symbols::STAR && self.match_symbol(symbols::SLASH) {
-                            //Decrement block counter on */
-                            block_count -= 1;
-                            
-                            //If this is a block comment, and the comment starts and ends have all
-                            //been paired, done
-                            if is_block && block_count == 0 {
-                                terminated = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if is_block && !terminated {
-                        return Err(GreyscaleError::CompileErr("Unterminated block comment".to_string()));
-                    }
-                    
-                    continue;
-                }
-            }
-            
-            break;
-        }
-        
-        Ok(())
-    }
-    
     pub fn is_at_end(&self) -> bool {
         self.current >= self.end || 
             self.current >= self.program.len()
@@ -835,6 +835,10 @@ impl<'a> LexerIterWithHistory<'a> {
     pub fn clear_inner_and_set_state(&mut self, new_state: LexerState) {
         self.clear();
         self.lexer.set_state(new_state);
+    }
+
+    pub fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
+        self.lexer.skip_comment_whitespace()
     }
 
     pub fn is_at_end(&self) -> bool {

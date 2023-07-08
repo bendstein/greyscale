@@ -5,14 +5,16 @@ use ast::{AST, Node};
 use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 
-use self::ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::Expression};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::Expression}, settings::ParserSettings};
 
 pub mod ast;
+pub mod settings;
 
 pub struct Parser<'a> {
     program: Rc<Vec<&'a str>>,
     lexer: LexerIterWithHistory<'a>,
-    errors: Vec<GreyscaleError>
+    errors: Vec<GreyscaleError>,
+    settings: ParserSettings
 }
 
 lazy_static! {
@@ -44,28 +46,20 @@ lazy_static! {
 
 impl<'a> Parser<'a> {
     pub fn parse(program: Rc<Vec<&'a str>>) -> Result<AST, GreyscaleError> {
+        Self::parse_with_settings(program, ParserSettings::default())
+    }
+
+    pub fn parse_with_settings(program: Rc<Vec<&'a str>>, settings: ParserSettings) -> Result<AST, GreyscaleError> {
         let lexer = Lexer::new(Rc::clone(&program));
 
         let mut parser = Self {
             program: Rc::clone(&program),
             lexer: LexerIterWithHistory::new(lexer),
-            errors: Vec::new()
+            errors: Vec::new(),
+            settings
         };
 
         parser.parse_program()
-    }
-
-    pub fn parse_expression(expression: Rc<Vec<&'a str>>) -> Result<ExprNode, GreyscaleError> {
-        let lexer = Lexer::new(Rc::clone(&expression));
-
-        let mut parser = Self {
-            program: Rc::clone(&expression),
-            lexer: LexerIterWithHistory::new(lexer),
-            errors: Vec::new()
-        };
-
-        parser.expression()?
-            .ok_or_else(|| GreyscaleError::CompileErr("Expected an expression".to_string()))
     }
 
     fn parse_program(&mut self) -> Result<AST, GreyscaleError> {
@@ -77,7 +71,16 @@ impl<'a> Parser<'a> {
             Ok(Node::Statement(Box::new(maybe_statement)))
         }
 
-        while !self.is_at_end() {
+        while !self.is_at_end() {         
+            //Skip any current whitespace in the lexer
+            self.lexer.skip_comment_whitespace()?;
+
+            //If skipping whitespace exhausts lexer, break
+            if self.is_at_end() {
+                break;
+            }
+
+            //Match next statement
             match inner(self) {
                 Ok(node) => {
                     statements.push(node);
@@ -127,6 +130,12 @@ impl<'a> Parser<'a> {
                         expression: Box::new(expr)
                     })));
                 }
+            }
+            //If implicit final semicolons are enabled, don't require a semicolon
+            else if self.settings.allow_implicit_final_semicolon {
+                return Ok(Some(StmtNode::Expression(Expression {
+                    expression: Box::new(expr)
+                })));
             }
 
             //No semicolon was found
@@ -486,7 +495,7 @@ impl<'a> Parser<'a> {
 
                         if rparen_token.token_type() == &TokenType::RParen {
                             self.lexer.advance();
-                            
+
                             //Return the expression inside of the parentheses
                             return Ok(Some(inner));
                         }
@@ -620,7 +629,8 @@ impl<'a> Parser<'a> {
                             let mut token_parser = Self {
                                 program: self.program.clone(),
                                 lexer: LexerIterWithHistory::new(token_lexer),
-                                errors: Vec::new()
+                                errors: Vec::new(),
+                                settings: self.settings
                             };
 
                             let expr = match segment_type {

@@ -2,6 +2,7 @@ extern crate unicode_segmentation;
 
 use std::rc::Rc;
 use greyscale::compiler::Compiler;
+use greyscale::parser::settings::ParserSettings;
 use greyscale::vm;
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -9,13 +10,17 @@ use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "`{5 + 17} ABCDE {`aaa {'aaa'}` + 'bbb'}` + 'alll'";
+    let program = "
+        5 + 6;
+        6 + 7
+    ";
 
     let graphemes = program.graphemes(true).collect::<Vec<&str>>();
     let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
     
-    //let parse_result = Parser::parse(Rc::clone(&rc_graphemes));
-    let parse_result = Parser::parse_expression(Rc::clone(&rc_graphemes));
+    let parse_result = Parser::parse_with_settings(Rc::clone(&rc_graphemes), ParserSettings {
+        allow_implicit_final_semicolon: true
+    });
 
     if let Err(parse_err) = &parse_result {
         handle_err(parse_err);
@@ -26,8 +31,7 @@ fn main() {
 
     //println!("{:#?}", parsed);
 
-    //let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
-    let compile_result = Compiler::compile_expression(Rc::clone(&rc_graphemes), parsed);
+    let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
 
     if let Err(compile_err) = &compile_result {
         handle_err(compile_err);

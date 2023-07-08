@@ -67,19 +67,19 @@ impl<'a> Compiler<'a> {
     fn expr(&mut self, expr: ExprNode) {
         match expr {
             ExprNode::Binary(binary) => {
-                self.binary(binary);
+                self.expr_binary(binary);
             },
             ExprNode::Unary(unary) => {
-                self.unary(unary);
+                self.expr_unary(unary);
             },
             ExprNode::Assignment(_) => {
                 self.errors.push(GreyscaleError::CompileErr("Assignment expression compilation not yet implemented.".to_string()));
             },
             ExprNode::Literal(literal) => {
-                self.literal(literal);
+                self.expr_literal(literal);
             },
             ExprNode::InterpolatedString(interp) => {
-                self.interpolated_string(interp);
+                self.expr_interpolated_string(interp);
             },
             ExprNode::Identifier(_) => {
                 self.errors.push(GreyscaleError::CompileErr("Identifier expression compilation not yet implemented.".to_string()));
@@ -107,8 +107,8 @@ impl<'a> Compiler<'a> {
             StmtNode::Declaration(_) => {
                 self.errors.push(GreyscaleError::CompileErr("Declaration statement compilation not yet implemented.".to_string()));
             },
-            StmtNode::Expression(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Expression statement compilation not yet implemented.".to_string()));
+            StmtNode::Expression(expression) => {
+                self.stmt_expression(expression);
             },
             StmtNode::For(_) => {
                 self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string()));
@@ -125,7 +125,30 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn literal(&mut self, lit: expr::Literal) {
+    fn push_const(&mut self, value: Value) {
+        let const_count = self.chunk.count_consts();
+
+        if const_count <= u8::MAX as usize {
+            let index = self.chunk.add_const(value) as u8;
+            self.chunk.write(ops::OP_CONSTANT);
+            self.chunk.write(index);
+        }
+        else if const_count <= u16::MAX as usize {
+            let index = self.chunk.add_const(value) as u16;
+            self.chunk.write(ops::OP_CONSTANT_LONG);
+            self.chunk.write_u16(index);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
+        }
+    }
+
+}
+
+//Expressions
+impl<'a> Compiler<'a> {
+
+    fn expr_literal(&mut self, lit: expr::Literal) {
         match lit.value {
             ast::LiteralType::Void => {
                 let value = Value::Void;
@@ -154,25 +177,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn push_const(&mut self, value: Value) {
-        let const_count = self.chunk.count_consts();
-
-        if const_count <= u8::MAX as usize {
-            let index = self.chunk.add_const(value) as u8;
-            self.chunk.write(ops::OP_CONSTANT);
-            self.chunk.write(index);
-        }
-        else if const_count <= u16::MAX as usize {
-            let index = self.chunk.add_const(value) as u16;
-            self.chunk.write(ops::OP_CONSTANT_LONG);
-            self.chunk.write_u16(index);
-        }
-        else {
-            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
-        }
-    }
-
-    fn unary(&mut self, expr: expr::Unary) {
+    fn expr_unary(&mut self, expr: expr::Unary) {
         //Write operand
         self.expr(*expr.expr);
 
@@ -191,7 +196,7 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn binary(&mut self, expr: expr::Binary) {
+    fn expr_binary(&mut self, expr: expr::Binary) {
         //Write first operand
         self.expr(*expr.left);
 
@@ -229,10 +234,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn interpolated_string(&mut self, interp: expr::InterpolatedString) {
+    fn expr_interpolated_string(&mut self, interp: expr::InterpolatedString) {
         //If empty, push empty string literal
         if interp.segments.is_empty() {
-            self.literal(expr::Literal 
+            self.expr_literal(expr::Literal 
             { 
                 value: ast::LiteralType::String(String::from(""))
             });
@@ -254,5 +259,12 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+}
 
+//Statements
+impl<'a> Compiler<'a> {
+    fn stmt_expression(&mut self, stmt: stmt::Expression) {
+        //Compile expression
+        self.expr(*stmt.expression);
+    }
 }
