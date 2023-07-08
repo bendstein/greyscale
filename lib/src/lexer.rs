@@ -419,6 +419,9 @@ impl<'a> Lexer<'a> {
     
     fn match_number(&mut self) -> Result<Token, GreyscaleError> {
         let start = self.current;
+
+        //Starting index of the actual number
+        let mut number_start = start;
         
         //Match first digit
         if let Some(next) = self.advance() {
@@ -430,9 +433,13 @@ impl<'a> Lexer<'a> {
             //If first digit is 0, it could be part of the base prefix
             let base: Base = if first_digit == 0 {
                 if self.match_symbol_case_insensitive(symbols::B) {
+                    //Don't return prefix with number
+                    number_start += 2;
                     Base::Binary
                 }
                 else if self.match_symbol_case_insensitive(symbols::X) {
+                    //Don't return prefix with number
+                    number_start += 2;
                     Base::Hexadecimal
                 }
                 else {
@@ -445,7 +452,7 @@ impl<'a> Lexer<'a> {
                 Base::Decimal
             };
             
-            let mut seen_dot = false;
+            let mut dot_location: Option<usize> = None;
             
             while let Some(next) = self.peek() {
                 //Any number of underscores allowed as visual separators.
@@ -467,12 +474,13 @@ impl<'a> Lexer<'a> {
                         if Self::is_digit(next, base) {
                             
                             //Cannot have multiple decimal points
-                            if seen_dot {
+                            if dot_location.is_some() {
                                 let _ = self.advance();
                                 return Err(GreyscaleError::CompileErr("Number cannot have multiple radix points.".to_string()));
                             }
                             
-                            seen_dot = true;
+                            //Record the location of the radix point
+                            dot_location = Some(self.current - start);
                             seen_digit = true;
                             let _ = self.advance_n(2);
                             continue;
@@ -498,7 +506,7 @@ impl<'a> Lexer<'a> {
                 Err(GreyscaleError::CompileErr("Expected a digit".to_string()))
             }
             else {
-                Ok(self.make_token(TokenType::Number(start..self.current, base)))
+                Ok(self.make_token(TokenType::Number(number_start..self.current, dot_location, base)))
             }
         }
         else {

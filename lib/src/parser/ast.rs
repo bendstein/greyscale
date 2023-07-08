@@ -23,7 +23,8 @@ pub enum LiteralType {
     Null,
     Boolean(bool),
     String(String),
-    Double(f64)
+    Double(f64),
+    Integer(u64)
 }
 
 pub mod expression {

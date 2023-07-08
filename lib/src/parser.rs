@@ -44,14 +44,11 @@ lazy_static! {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(program: &'a str) -> Result<AST, GreyscaleError> {
-        let gprogram: Vec<&str> = program.graphemes(true).collect();
-        let rcprogram = Rc::from(gprogram);
-
-        let lexer = Lexer::new(Rc::clone(&rcprogram));
+    pub fn parse(program: Rc<Vec<&'a str>>) -> Result<AST, GreyscaleError> {
+        let lexer = Lexer::new(Rc::clone(&program));
 
         let mut parser = Self {
-            program: Rc::clone(&rcprogram),
+            program: Rc::clone(&program),
             lexer: LexerIterWithHistory::new(lexer),
             errors: Vec::new()
         };
@@ -85,9 +82,6 @@ impl<'a> Parser<'a> {
         }
 
         while !self.is_at_end() {
-            //Clear saved token history at beginning of statement
-            self.lexer.clear();
-
             match inner(self) {
                 Ok(node) => {
                     statements.push(node);
@@ -96,6 +90,9 @@ impl<'a> Parser<'a> {
                     self.errors.push(err)
                 },
             }
+
+            //Clear saved token history after each statement
+            self.lexer.clear();
         }
 
         if self.errors.is_empty() {
@@ -128,7 +125,7 @@ impl<'a> Parser<'a> {
                 let semitoken = token?;
 
                 if semitoken.token_type() == &TokenType::Semi {
-                    self.lexer.advance();
+                    //self.lexer.advance();
 
                     return Ok(Some(StmtNode::Expression(Expression {
                         expression: Box::new(expr)
@@ -457,7 +454,7 @@ impl<'a> Parser<'a> {
                 //Handle string literal
                 return self.parse_string(primary_token).map(Some);
             }
-            else if let TokenType::Number(_, _) = token_type {
+            else if let TokenType::Number(_, _, _) = token_type {
                 self.lexer.advance();
 
                 //Handle number literal
@@ -511,18 +508,68 @@ impl<'a> Parser<'a> {
     fn parse_number(&self, token: Token) -> Result<ExprNode, GreyscaleError> {
         let token_type = token.token_type();
 
-        if let TokenType::Number(_range, base) = token_type {
+        if let TokenType::Number(range, dot_location, base) = token_type {
             
-            match base {
-                Base::Decimal => {
-                    todo!()
-                },
-                Base::Binary => {
-                    todo!()
-                },
-                Base::Hexadecimal => {
-                    todo!()
-                },
+            fn get_digit(d: &str) -> u8 {
+                match d {
+                    "0" => 0,
+                    "1" => 1,
+                    "2" => 2,
+                    "3" => 3,
+                    "4" => 4,
+                    "5" => 5,
+                    "6" => 6,
+                    "7" => 7,
+                    "8" => 8,
+                    "9" => 9,
+                    "a" | "A" => 10,
+                    "b" | "B" => 11,
+                    "c" | "C" => 12,
+                    "d" | "D" => 13,
+                    "e" | "E" => 14,
+                    "f" | "F" => 15,
+                    _ => 0
+                }
+            }
+
+            let base_num = match base {
+                Base::Decimal => 10,
+                Base::Binary => 2,
+                Base::Hexadecimal => 16
+            };
+
+            //Parse as decimal
+            if let Some(radix) = dot_location {
+                let mut n: f64 = 0_f64;
+
+                let start_exp: i32 = (radix - range.start) as i32;
+                let end_exp: i32 = -((range.end - radix) as i32);
+                
+                for (index, i) in (start_exp..end_exp).enumerate() {
+                    let d = self.program[range.start + index];
+                    let digit = get_digit(d);
+                    n += (digit as f64) * (base_num as f64).powi(end_exp - 1 - i);
+                }
+
+                return Ok(ExprNode::Literal(Literal {
+                    value: LiteralType::Double(n)
+                }))
+            }
+            //Parse as integer
+            else {
+                let mut n: u64 = 0_u64;
+
+                let end_exp: u32 = (range.end - range.start) as u32;
+                
+                for (index, i) in (0..end_exp).enumerate() {
+                    let d = self.program[range.start + index];
+                    let digit = get_digit(d);
+                    n += (digit as u64) * (base_num as u64).pow(end_exp - 1 - i);
+                }
+
+                return Ok(ExprNode::Literal(Literal {
+                    value: LiteralType::Integer(n)
+                }))
             }
         }
 

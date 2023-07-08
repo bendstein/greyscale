@@ -46,7 +46,7 @@ pub enum TokenType {
 
     String(Range<usize>, StringType),
 
-    Number(Range<usize>, Base),
+    Number(Range<usize>, Option<usize>, Base),
 
     //Keywords
     If, Else,
@@ -123,7 +123,7 @@ impl TokenType {
                 StringType::InterpolatedSegment => "ISEG",
                 StringType::Escaped => "ESC",
             }),
-            TokenType::Number(_, b) => format!("{}NUM", match b {
+            TokenType::Number(_, _, b) => format!("{}NUM", match b {
                 Base::Binary => "b",
                 Base::Hexadecimal => "x",
                 Base::Decimal => ""
