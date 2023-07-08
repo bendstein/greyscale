@@ -9,7 +9,7 @@ use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "-5 - 3";
+    let program = "`{5 + 17} ABCDE {`aaa {'aaa'}` + 'bbb'}` + 'alll'";
 
     let graphemes = program.graphemes(true).collect::<Vec<&str>>();
     let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);

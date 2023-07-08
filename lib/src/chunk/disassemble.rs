@@ -51,24 +51,52 @@ impl Chunk {
         let op = Op::from(instr);
 
         match op {
-            //Constant declarations
+            //Constant declarations -------------------------------------------
             Op::Constant => self.disassemble_instr_const(offset, f),
             Op::ConstantLong => self.disassemble_instr_const_long(offset, f),
 
-            //Keywords
+
+            //Keywords --------------------------------------------------------
             Op::Return => self.disassemble_instr_simple(op, offset, f),
 
-            //Unary operators
-            Op::Negate => self.disassemble_instr_simple(op, offset, f),
 
-            //Binary operators
+            //Unary operators -------------------------------------------------
+            //Arithmetic
+            Op::Negate => self.disassemble_instr_simple(op, offset, f),
+            //Logical
+            Op::LogicalNot => self.disassemble_instr_simple(op, offset, f),
+            //Bitwise
+            Op::BitwiseNot => self.disassemble_instr_simple(op, offset, f),
+
+
+            //Binary operators ------------------------------------------------
+            //Arithmetic
             Op::Add => self.disassemble_instr_simple(op, offset, f),
             Op::Subtract => self.disassemble_instr_simple(op, offset, f),
             Op::Multiply => self.disassemble_instr_simple(op, offset, f),
             Op::Divide => self.disassemble_instr_simple(op, offset, f),
             Op::Modulus => self.disassemble_instr_simple(op, offset, f),
+            //Logical
+            Op::LogicalAnd => self.disassemble_instr_simple(op, offset, f),
+            Op::LogicalOr => self.disassemble_instr_simple(op, offset, f),
+            Op::LogicalXor => self.disassemble_instr_simple(op, offset, f),
+            //Bitwise
+            Op::BitwiseAnd => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseOr => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseXor => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseLShift => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseRShift => self.disassemble_instr_simple(op, offset, f),
+            //Comparison
+            Op::Equal => self.disassemble_instr_simple(op, offset, f),
+            Op::NotEqual => self.disassemble_instr_simple(op, offset, f),
+            Op::Greater => self.disassemble_instr_simple(op, offset, f),
+            Op::Less => self.disassemble_instr_simple(op, offset, f),
+            Op::GreaterEqual => self.disassemble_instr_simple(op, offset, f),
+            Op::LessEqual => self.disassemble_instr_simple(op, offset, f),
+            //Internal
+            Op::Concat => self.disassemble_instr_simple(op, offset, f),
 
-            //Other
+            //Other -----------------------------------------------------------
             Op::Unknown(_) => self.disassemble_instr_unknown(instr, offset, f)
         }
     }

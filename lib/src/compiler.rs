@@ -3,6 +3,7 @@ use std::rc::Rc;
 use crate::parser::ast;
 use crate::chunk;
 use crate::token::token_type::TokenType;
+use crate::value::object::Object;
 use crate::vm::error;
 use crate::ops;
 use crate::value;
@@ -77,8 +78,8 @@ impl<'a> Compiler<'a> {
             ExprNode::Literal(literal) => {
                 self.literal(literal);
             },
-            ExprNode::InterpolatedString(_) => {
-                self.errors.push(GreyscaleError::CompileErr("InterpolatedString expression compilation not yet implemented.".to_string()));
+            ExprNode::InterpolatedString(interp) => {
+                self.interpolated_string(interp);
             },
             ExprNode::Identifier(_) => {
                 self.errors.push(GreyscaleError::CompileErr("Identifier expression compilation not yet implemented.".to_string()));
@@ -127,53 +128,47 @@ impl<'a> Compiler<'a> {
     fn literal(&mut self, lit: expr::Literal) {
         match lit.value {
             ast::LiteralType::Void => {
-                self.errors.push(GreyscaleError::CompileErr("Void literal compilation not yet implemented.".to_string()));
+                let value = Value::Void;
+                self.push_const(value);
             },
             ast::LiteralType::Null => {
-                self.errors.push(GreyscaleError::CompileErr("Null literal compilation not yet implemented.".to_string()));
+                let value = Value::Null;
+                self.push_const(value);
             },
-            ast::LiteralType::Boolean(_b) => {
-                self.errors.push(GreyscaleError::CompileErr("Boolean literal compilation not yet implemented.".to_string()));
+            ast::LiteralType::Boolean(b) => {
+                let value = Value::Bool(b);
+                self.push_const(value);
             },
-            ast::LiteralType::String(_s) => {
-                self.errors.push(GreyscaleError::CompileErr("String literal compilation not yet implemented.".to_string()));
+            ast::LiteralType::String(s) => {
+                let value = Value::Object(Rc::new(Object::String(s)));
+                self.push_const(value);
             },
             ast::LiteralType::Double(n) => {
-                let const_count = self.chunk.count_consts();
                 let value = Value::Double(n);
-
-                if const_count <= u8::MAX as usize {
-                    let index = self.chunk.add_const(value) as u8;
-                    self.chunk.write(ops::OP_CONSTANT);
-                    self.chunk.write(index);
-                }
-                else if const_count <= u16::MAX as usize {
-                    let index = self.chunk.add_const(value) as u16;
-                    self.chunk.write(ops::OP_CONSTANT_LONG);
-                    self.chunk.write_u16(index);
-                }
-                else {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
-                }
+                self.push_const(value);
             },
             ast::LiteralType::Integer(n) => {
-                let const_count = self.chunk.count_consts();
-                let value = Value::Double(n as f64);
-
-                if const_count <= u8::MAX as usize {
-                    let index = self.chunk.add_const(value) as u8;
-                    self.chunk.write(ops::OP_CONSTANT);
-                    self.chunk.write(index);
-                }
-                else if const_count <= u16::MAX as usize {
-                    let index = self.chunk.add_const(value) as u16;
-                    self.chunk.write(ops::OP_CONSTANT_LONG);
-                    self.chunk.write_u16(index);
-                }
-                else {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
-                }
+                let value = Value::Int(n);
+                self.push_const(value);
             },
+        }
+    }
+
+    fn push_const(&mut self, value: Value) {
+        let const_count = self.chunk.count_consts();
+
+        if const_count <= u8::MAX as usize {
+            let index = self.chunk.add_const(value) as u8;
+            self.chunk.write(ops::OP_CONSTANT);
+            self.chunk.write(index);
+        }
+        else if const_count <= u16::MAX as usize {
+            let index = self.chunk.add_const(value) as u16;
+            self.chunk.write(ops::OP_CONSTANT_LONG);
+            self.chunk.write_u16(index);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
         }
     }
 
@@ -185,17 +180,9 @@ impl<'a> Compiler<'a> {
         for op_token in expr.ops {
             let token_type = op_token.token_type();
             match token_type {
-                TokenType::Minus => {
-                    self.chunk.write(ops::OP_NEGATE);
-                },
-                TokenType::Tilde => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Unary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Bang => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Unary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
+                TokenType::Minus => self.chunk.write(ops::OP_NEGATE),
+                TokenType::Tilde => self.chunk.write(ops::OP_BITWISE_NOT),
+                TokenType::Bang => self.chunk.write(ops::OP_LOGICAL_NOT),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
                         token_type.as_string())));
@@ -215,80 +202,54 @@ impl<'a> Compiler<'a> {
             let token_type = operation.op.token_type();
 
             match token_type {
-                TokenType::Plus => {
-                    self.chunk.write(ops::OP_ADD);
-                },
-                TokenType::Minus => {
-                    self.chunk.write(ops::OP_SUBTRACT);
-                },
-                TokenType::Star => {
-                    self.chunk.write(ops::OP_MULTIPLY);
-                },
-                TokenType::Slash => {
-                    self.chunk.write(ops::OP_DIVIDE);
-                },
-                TokenType::Percent => {
-                    self.chunk.write(ops::OP_MODULUS);
-                },
-                TokenType::PipePipe => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::CaretCaret => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::AmpAmp => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Pipe => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Caret => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Amp => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::EqualEqual => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::BangEqual => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Greater => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::GreaterEqual => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::Less => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::LessEqual => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::LessLess => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
-                TokenType::GreaterGreater => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
-                        token_type.as_string())));
-                },
+                TokenType::Plus => self.chunk.write(ops::OP_ADD),
+                TokenType::Minus => self.chunk.write(ops::OP_SUBTRACT),
+                TokenType::Star => self.chunk.write(ops::OP_MULTIPLY),
+                TokenType::Slash => self.chunk.write(ops::OP_DIVIDE),
+                TokenType::Percent => self.chunk.write(ops::OP_MODULUS),
+                TokenType::PipePipe => self.chunk.write(ops::OP_LOGICAL_OR),
+                TokenType::CaretCaret => self.chunk.write(ops::OP_LOGICAL_XOR),
+                TokenType::AmpAmp => self.chunk.write(ops::OP_LOGICAL_AND),
+                TokenType::Pipe => self.chunk.write(ops::OP_BITWISE_OR),
+                TokenType::Caret => self.chunk.write(ops::OP_BITWISE_XOR),
+                TokenType::Amp => self.chunk.write(ops::OP_BITWISE_AND),
+                TokenType::LessLess => self.chunk.write(ops::OP_BITWISE_LSHIFT),
+                TokenType::GreaterGreater => self.chunk.write(ops::OP_BITWISE_RSHIFT),
+                TokenType::EqualEqual => self.chunk.write(ops::OP_EQUAL),
+                TokenType::BangEqual => self.chunk.write(ops::OP_NOT_EQUAL),
+                TokenType::Greater => self.chunk.write(ops::OP_GREATER),
+                TokenType::GreaterEqual => self.chunk.write(ops::OP_GREATER_EQUAL),
+                TokenType::Less => self.chunk.write(ops::OP_LESS),
+                TokenType::LessEqual => self.chunk.write(ops::OP_LESS_EQUAL),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
                         token_type.as_string())));
+                }
+            }
+        }
+    }
+
+    fn interpolated_string(&mut self, interp: expr::InterpolatedString) {
+        //If empty, push empty string literal
+        if interp.segments.is_empty() {
+            self.literal(expr::Literal 
+            { 
+                value: ast::LiteralType::String(String::from(""))
+            });
+        }
+        else {
+            let mut first: bool = true;
+
+            //Concatenate segments
+            for segment in interp.segments {
+                self.expr(segment);
+
+                //Don't push concat operation after first
+                if first {
+                    first = false;
+                }
+                else {
+                    self.chunk.write(ops::OP_CONCAT);
                 }
             }
         }
