@@ -93,6 +93,10 @@ impl VirtualMachine {
         Ok(())
     }
 
+    pub fn peek_value(&self) -> Option<&Value> {
+        self.stack.last()
+    }
+
     fn read_const(&self, n: usize) -> Result<&Value, GreyscaleError> {
         if let Some(constant) = self.chunk.try_get_const(n) {
             Ok(constant)
@@ -133,8 +137,8 @@ impl VirtualMachine {
         };
 
         if matches!(op, Op::Add | Op::Subtract | Op::Multiply | Op::Divide | Op::Modulus) {
-            let val_a = next_arg()?;
             let val_b = next_arg()?;
+            let val_a = next_arg()?;
 
             match val_a {
                 Value::Double(a) => {
@@ -175,10 +179,6 @@ impl VirtualMachine {
     fn pop_value(&mut self) -> Option<Value> {
         self.stack.pop()
     }
-
-    // fn peek_value(&self) -> Option<&Value> {
-    //     self.stack.last()
-    // }
 
     // fn reset_stack(&mut self) {
     //     self.stack.clear();

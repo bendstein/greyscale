@@ -1,6 +1,21 @@
 use std::rc::Rc;
 
-use crate::{parser::ast::{AST, statement::StmtNode, expression::{ExprNode, Literal}}, chunk::Chunk, vm::error::GreyscaleError, ops, value::Value};
+use crate::parser::ast;
+use crate::chunk;
+use crate::token::token_type::TokenType;
+use crate::vm::error;
+use crate::ops;
+use crate::value;
+
+use ast::expression as expr;
+use ast::statement as stmt;
+
+use ast::AST;
+use expr::ExprNode;
+use stmt::StmtNode;
+use error::GreyscaleError;
+use chunk::Chunk;
+use value::Value;
 
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
@@ -50,11 +65,11 @@ impl<'a> Compiler<'a> {
 
     fn expr(&mut self, expr: ExprNode) {
         match expr {
-            ExprNode::Binary(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Binary expression compilation not yet implemented.".to_string()));
+            ExprNode::Binary(binary) => {
+                self.binary(binary);
             },
-            ExprNode::Unary(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Unary expression compilation not yet implemented.".to_string()));
+            ExprNode::Unary(unary) => {
+                self.unary(unary);
             },
             ExprNode::Assignment(_) => {
                 self.errors.push(GreyscaleError::CompileErr("Assignment expression compilation not yet implemented.".to_string()));
@@ -109,21 +124,21 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn literal(&mut self, lit: Literal) {
+    fn literal(&mut self, lit: expr::Literal) {
         match lit.value {
-            crate::parser::ast::LiteralType::Void => {
+            ast::LiteralType::Void => {
                 self.errors.push(GreyscaleError::CompileErr("Void literal compilation not yet implemented.".to_string()));
             },
-            crate::parser::ast::LiteralType::Null => {
+            ast::LiteralType::Null => {
                 self.errors.push(GreyscaleError::CompileErr("Null literal compilation not yet implemented.".to_string()));
             },
-            crate::parser::ast::LiteralType::Boolean(b) => {
+            ast::LiteralType::Boolean(_b) => {
                 self.errors.push(GreyscaleError::CompileErr("Boolean literal compilation not yet implemented.".to_string()));
             },
-            crate::parser::ast::LiteralType::String(s) => {
+            ast::LiteralType::String(_s) => {
                 self.errors.push(GreyscaleError::CompileErr("String literal compilation not yet implemented.".to_string()));
             },
-            crate::parser::ast::LiteralType::Double(n) => {
+            ast::LiteralType::Double(n) => {
                 let const_count = self.chunk.count_consts();
                 let value = Value::Double(n);
 
@@ -141,7 +156,7 @@ impl<'a> Compiler<'a> {
                     self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
                 }
             },
-            crate::parser::ast::LiteralType::Integer(n) => {
+            ast::LiteralType::Integer(n) => {
                 let const_count = self.chunk.count_consts();
                 let value = Value::Double(n as f64);
 
@@ -159,6 +174,123 @@ impl<'a> Compiler<'a> {
                     self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
                 }
             },
+        }
+    }
+
+    fn unary(&mut self, expr: expr::Unary) {
+        //Write operand
+        self.expr(*expr.expr);
+
+        //Write unary operators
+        for op_token in expr.ops {
+            let token_type = op_token.token_type();
+            match token_type {
+                TokenType::Minus => {
+                    self.chunk.write(ops::OP_NEGATE);
+                },
+                TokenType::Tilde => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Unary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Bang => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Unary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                _ => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
+                        token_type.as_string())));
+                }
+            }
+        }
+    }
+
+    fn binary(&mut self, expr: expr::Binary) {
+        //Write first operand
+        self.expr(*expr.left);
+
+        //For each following part, write the operand followed by the operator
+        for operation in expr.right {
+            self.expr(*operation.right);
+            
+            let token_type = operation.op.token_type();
+
+            match token_type {
+                TokenType::Plus => {
+                    self.chunk.write(ops::OP_ADD);
+                },
+                TokenType::Minus => {
+                    self.chunk.write(ops::OP_SUBTRACT);
+                },
+                TokenType::Star => {
+                    self.chunk.write(ops::OP_MULTIPLY);
+                },
+                TokenType::Slash => {
+                    self.chunk.write(ops::OP_DIVIDE);
+                },
+                TokenType::Percent => {
+                    self.chunk.write(ops::OP_MODULUS);
+                },
+                TokenType::PipePipe => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::CaretCaret => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::AmpAmp => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Pipe => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Caret => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Amp => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::EqualEqual => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::BangEqual => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Greater => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::GreaterEqual => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::Less => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::LessEqual => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::LessLess => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                TokenType::GreaterGreater => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Binary operator '{}' not yet supported.", 
+                        token_type.as_string())));
+                },
+                _ => {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
+                        token_type.as_string())));
+                }
+            }
         }
     }
 

@@ -24,7 +24,7 @@ pub enum LiteralType {
     Boolean(bool),
     String(String),
     Double(f64),
-    Integer(u64)
+    Integer(i64)
 }
 
 pub mod expression {

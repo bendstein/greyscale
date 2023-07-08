@@ -2,13 +2,14 @@ extern crate unicode_segmentation;
 
 use std::rc::Rc;
 use greyscale::compiler::Compiler;
+use greyscale::vm;
 use unicode_segmentation::UnicodeSegmentation;
 
 use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "0b11.11";
+    let program = "-5 - 3";
 
     let graphemes = program.graphemes(true).collect::<Vec<&str>>();
     let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
@@ -23,21 +24,36 @@ fn main() {
 
     let parsed = parse_result.unwrap();
 
-    println!("{:#?}", parsed);
+    //println!("{:#?}", parsed);
 
     //let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
-    // let compile_result = Compiler::compile_expression(Rc::clone(&rc_graphemes), parsed);
+    let compile_result = Compiler::compile_expression(Rc::clone(&rc_graphemes), parsed);
 
-    // if let Err(compile_err) = &compile_result {
-    //     handle_err(compile_err);
-    //     return;
-    // }
+    if let Err(compile_err) = &compile_result {
+        handle_err(compile_err);
+        return;
+    }
 
-    // let mut compiled = compile_result.unwrap();
+    let mut compiled = compile_result.unwrap();
 
-    // compiled.name = Some(String::from("Test Expr"));
+    compiled.name = Some(String::from("Test Expr"));
 
-    // println!("{compiled}");
+    println!("{compiled}");
+
+    let mut vm = vm::VirtualMachine::new(compiled);
+
+    let execute_result = vm.execute();
+
+    if let Err(execute_err) = &execute_result {
+        handle_err(execute_err);
+        return;
+    }
+
+    if let Some(r) = vm.peek_value() {
+        println!("{r}");
+    }
+
+    println!("OK");
 }
 
 fn handle_err(err: &GreyscaleError) {

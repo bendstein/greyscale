@@ -485,6 +485,8 @@ impl<'a> Parser<'a> {
                         let rparen_token = token?;
 
                         if rparen_token.token_type() == &TokenType::RParen {
+                            self.lexer.advance();
+                            
                             //Return the expression inside of the parentheses
                             return Ok(Some(inner));
                         }
@@ -559,14 +561,14 @@ impl<'a> Parser<'a> {
             }
             //Parse as integer
             else {
-                let mut n: u64 = 0_u64;
+                let mut n: i64 = 0_i64;
 
                 let end_exp: u32 = (range.end - range.start) as u32;
                 
                 for (index, i) in (0..end_exp).enumerate() {
                     let d = self.program[range.start + index];
                     let digit = get_digit(d);
-                    n += (digit as u64) * (base_num as u64).pow(end_exp - 1 - i);
+                    n += (digit as i64) * (base_num as i64).pow(end_exp - 1 - i);
                 }
 
                 return Ok(ExprNode::Literal(Literal {
