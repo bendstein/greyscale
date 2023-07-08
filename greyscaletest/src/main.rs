@@ -3,6 +3,7 @@ extern crate unicode_segmentation;
 use std::rc::Rc;
 use greyscale::compiler::Compiler;
 use greyscale::parser::settings::ParserSettings;
+use greyscale::vm::settings::VMSettings;
 use greyscale::{vm, constants};
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -10,9 +11,10 @@ use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "
-        print 5 + 6;
-        print 8 * 9;
+    let program = "6 * 2;
+    3 * 5;
+
+    print 16;
     ";
 
     if constants::TRACE {
@@ -33,8 +35,6 @@ fn main() {
 
     let parsed = parse_result.unwrap();
 
-    //println!("{:#?}", parsed);
-
     let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
 
     if let Err(compile_err) = &compile_result {
@@ -44,11 +44,14 @@ fn main() {
 
     let mut compiled = compile_result.unwrap();
 
-    compiled.name = Some(String::from("Test Expr"));
+    if constants::TRACE {
+        compiled.name = Some(String::from("Trace"));
+        println!("{compiled}");
+    }
 
-    println!("{compiled}");
-
-    let mut vm = vm::VirtualMachine::new(compiled);
+    let mut vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
+        ignore_final_pop: true
+    });
 
     let execute_result = vm.execute();
 
@@ -61,13 +64,16 @@ fn main() {
         println!("{r}");
     }
 
-    println!("OK");
+    if constants::TRACE {
+        println!("OK");
+    }
+
 }
 
 fn handle_err(err: &GreyscaleError) {
     match err {
-        GreyscaleError::CompileErr(m) => eprintln!("{m}"),
-        GreyscaleError::RuntimeErr(m) => eprintln!("{m}"),
+        GreyscaleError::CompileErr(m, location) => eprintln!("[Ln: {}, Col: {}] {m}", location.line, location.column),
+        GreyscaleError::RuntimeErr(m, location) => eprintln!("{m} at: line {}", location.line),
         GreyscaleError::AggregateErr(inner) => {
             for i in inner {
                 handle_err(i)

@@ -35,8 +35,8 @@ fn main() -> Result<(), String> {
 
     fn handle_err(err: GreyscaleError) -> String {
         match err {
-            GreyscaleError::CompileErr(ce) => {
-                format!("A compile error occurred: {ce}")
+            GreyscaleError::CompileErr(ce, loc) => {
+                format!("A compile error occurred: [Ln: {}, Col: {}] {ce}", loc.line, loc.column)
             },
             GreyscaleError::RuntimeErr(re) => {
                 format!("A runtime error occurred: {re}")

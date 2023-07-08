@@ -17,6 +17,7 @@ use stmt::StmtNode;
 use error::GreyscaleError;
 use chunk::Chunk;
 use value::Value;
+use crate::location::Location;
 
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
@@ -66,83 +67,83 @@ impl<'a> Compiler<'a> {
 
     fn expr(&mut self, expr: ExprNode) {
         match expr {
-            ExprNode::Binary(binary) => {
-                self.expr_binary(binary);
+            ExprNode::Binary(binary, loc) => {
+                self.expr_binary(binary, loc);
             },
-            ExprNode::Unary(unary) => {
-                self.expr_unary(unary);
+            ExprNode::Unary(unary, loc) => {
+                self.expr_unary(unary, loc);
             },
-            ExprNode::Assignment(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Assignment expression compilation not yet implemented.".to_string()));
+            ExprNode::Assignment(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Assignment expression compilation not yet implemented.".to_string(), loc));
             },
-            ExprNode::Literal(literal) => {
-                self.expr_literal(literal);
+            ExprNode::Literal(literal, loc) => {
+                self.expr_literal(literal, loc);
             },
-            ExprNode::InterpolatedString(interp) => {
-                self.expr_interpolated_string(interp);
+            ExprNode::InterpolatedString(interp, loc) => {
+                self.expr_interpolated_string(interp, loc);
             },
-            ExprNode::Identifier(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Identifier expression compilation not yet implemented.".to_string()));
+            ExprNode::Identifier(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Identifier expression compilation not yet implemented.".to_string(), loc));
             },
-            ExprNode::Function(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Function expression compilation not yet implemented.".to_string()));
+            ExprNode::Function(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Function expression compilation not yet implemented.".to_string(), loc));
             },
-            ExprNode::Call(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Call expression compilation not yet implemented.".to_string()));
+            ExprNode::Call(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Call expression compilation not yet implemented.".to_string(), loc));
             },
         }
     }
 
     fn stmt(&mut self, stmt: StmtNode) {
         match stmt {
-            StmtNode::Block(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Block statement compilation not yet implemented.".to_string()));
+            StmtNode::Block(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Block statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Conditional(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Conditional statement compilation not yet implemented.".to_string()));
+            StmtNode::Conditional(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Conditional statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Keyword(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string()));
+            StmtNode::Keyword(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Declaration(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Declaration statement compilation not yet implemented.".to_string()));
+            StmtNode::Declaration(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Declaration statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Expression(expression) => {
+            StmtNode::Expression(expression, _) => {
                 self.stmt_expression(expression);
             },
-            StmtNode::Print(print) => {
+            StmtNode::Print(print, _) => {
                 self.stmt_print(print);
             },
-            StmtNode::For(_) => {
-                self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string()));
+            StmtNode::For(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::While(_) => {
-                self.errors.push(GreyscaleError::CompileErr("While statement compilation not yet implemented.".to_string()));
+            StmtNode::While(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("While statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Loop(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Loop statement compilation not yet implemented.".to_string()));
+            StmtNode::Loop(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Loop statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Return(_) => {
-                self.errors.push(GreyscaleError::CompileErr("Return statement compilation not yet implemented.".to_string()));
+            StmtNode::Return(_, loc) => {
+                self.errors.push(GreyscaleError::CompileErr("Return statement compilation not yet implemented.".to_string(), loc));
             },
         }
     }
 
-    fn push_const(&mut self, value: Value) {
+    fn push_const(&mut self, value: Value, location: Location) {
         let const_count = self.chunk.count_consts();
 
         if const_count <= u8::MAX as usize {
             let index = self.chunk.add_const(value) as u8;
-            self.chunk.write(ops::OP_CONSTANT);
-            self.chunk.write(index);
+            self.chunk.write(ops::OP_CONSTANT, location.line);
+            self.chunk.write(index, location.line);
         }
         else if const_count <= u16::MAX as usize {
             let index = self.chunk.add_const(value) as u16;
-            self.chunk.write(ops::OP_CONSTANT_LONG);
-            self.chunk.write_u16(index);
+            self.chunk.write(ops::OP_CONSTANT_LONG, location.line);
+            self.chunk.write_u16(index, location.line);
         }
         else {
-            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX)));
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX), location));
         }
     }
 
@@ -151,36 +152,36 @@ impl<'a> Compiler<'a> {
 //Expressions
 impl<'a> Compiler<'a> {
 
-    fn expr_literal(&mut self, lit: expr::Literal) {
+    fn expr_literal(&mut self, lit: expr::Literal, location: Location) {
         match lit.value {
             ast::LiteralType::Void => {
                 let value = Value::Void;
-                self.push_const(value);
+                self.push_const(value, location);
             },
             ast::LiteralType::Null => {
                 let value = Value::Null;
-                self.push_const(value);
+                self.push_const(value, location);
             },
             ast::LiteralType::Boolean(b) => {
                 let value = Value::Bool(b);
-                self.push_const(value);
+                self.push_const(value, location);
             },
             ast::LiteralType::String(s) => {
                 let value = Value::Object(Rc::new(Object::String(s)));
-                self.push_const(value);
+                self.push_const(value, location);
             },
             ast::LiteralType::Double(n) => {
                 let value = Value::Double(n);
-                self.push_const(value);
+                self.push_const(value, location);
             },
             ast::LiteralType::Integer(n) => {
                 let value = Value::Int(n);
-                self.push_const(value);
+                self.push_const(value, location);
             },
         }
     }
 
-    fn expr_unary(&mut self, expr: expr::Unary) {
+    fn expr_unary(&mut self, expr: expr::Unary, location: Location) {
         //Write operand
         self.expr(*expr.expr);
 
@@ -188,18 +189,18 @@ impl<'a> Compiler<'a> {
         for op_token in expr.ops {
             let token_type = op_token.token_type();
             match token_type {
-                TokenType::Minus => self.chunk.write(ops::OP_NEGATE),
-                TokenType::Tilde => self.chunk.write(ops::OP_BITWISE_NOT),
-                TokenType::Bang => self.chunk.write(ops::OP_LOGICAL_NOT),
+                TokenType::Minus => self.chunk.write(ops::OP_NEGATE, location.line),
+                TokenType::Tilde => self.chunk.write(ops::OP_BITWISE_NOT, location.line),
+                TokenType::Bang => self.chunk.write(ops::OP_LOGICAL_NOT, location.line),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
-                        token_type.as_string())));
+                        token_type.as_string()), location));
                 }
             }
         }
     }
 
-    fn expr_binary(&mut self, expr: expr::Binary) {
+    fn expr_binary(&mut self, expr: expr::Binary, location: Location) {
         //Write first operand
         self.expr(*expr.left);
 
@@ -210,40 +211,40 @@ impl<'a> Compiler<'a> {
             let token_type = operation.op.token_type();
 
             match token_type {
-                TokenType::Plus => self.chunk.write(ops::OP_ADD),
-                TokenType::Minus => self.chunk.write(ops::OP_SUBTRACT),
-                TokenType::Star => self.chunk.write(ops::OP_MULTIPLY),
-                TokenType::Slash => self.chunk.write(ops::OP_DIVIDE),
-                TokenType::Percent => self.chunk.write(ops::OP_MODULUS),
-                TokenType::PipePipe => self.chunk.write(ops::OP_LOGICAL_OR),
-                TokenType::CaretCaret => self.chunk.write(ops::OP_LOGICAL_XOR),
-                TokenType::AmpAmp => self.chunk.write(ops::OP_LOGICAL_AND),
-                TokenType::Pipe => self.chunk.write(ops::OP_BITWISE_OR),
-                TokenType::Caret => self.chunk.write(ops::OP_BITWISE_XOR),
-                TokenType::Amp => self.chunk.write(ops::OP_BITWISE_AND),
-                TokenType::LessLess => self.chunk.write(ops::OP_BITWISE_LSHIFT),
-                TokenType::GreaterGreater => self.chunk.write(ops::OP_BITWISE_RSHIFT),
-                TokenType::EqualEqual => self.chunk.write(ops::OP_EQUAL),
-                TokenType::BangEqual => self.chunk.write(ops::OP_NOT_EQUAL),
-                TokenType::Greater => self.chunk.write(ops::OP_GREATER),
-                TokenType::GreaterEqual => self.chunk.write(ops::OP_GREATER_EQUAL),
-                TokenType::Less => self.chunk.write(ops::OP_LESS),
-                TokenType::LessEqual => self.chunk.write(ops::OP_LESS_EQUAL),
+                TokenType::Plus => self.chunk.write(ops::OP_ADD, location.line),
+                TokenType::Minus => self.chunk.write(ops::OP_SUBTRACT, location.line),
+                TokenType::Star => self.chunk.write(ops::OP_MULTIPLY, location.line),
+                TokenType::Slash => self.chunk.write(ops::OP_DIVIDE, location.line),
+                TokenType::Percent => self.chunk.write(ops::OP_MODULUS, location.line),
+                TokenType::PipePipe => self.chunk.write(ops::OP_LOGICAL_OR, location.line),
+                TokenType::CaretCaret => self.chunk.write(ops::OP_LOGICAL_XOR, location.line),
+                TokenType::AmpAmp => self.chunk.write(ops::OP_LOGICAL_AND, location.line),
+                TokenType::Pipe => self.chunk.write(ops::OP_BITWISE_OR, location.line),
+                TokenType::Caret => self.chunk.write(ops::OP_BITWISE_XOR, location.line),
+                TokenType::Amp => self.chunk.write(ops::OP_BITWISE_AND, location.line),
+                TokenType::LessLess => self.chunk.write(ops::OP_BITWISE_LSHIFT, location.line),
+                TokenType::GreaterGreater => self.chunk.write(ops::OP_BITWISE_RSHIFT, location.line),
+                TokenType::EqualEqual => self.chunk.write(ops::OP_EQUAL, location.line),
+                TokenType::BangEqual => self.chunk.write(ops::OP_NOT_EQUAL, location.line),
+                TokenType::Greater => self.chunk.write(ops::OP_GREATER, location.line),
+                TokenType::GreaterEqual => self.chunk.write(ops::OP_GREATER_EQUAL, location.line),
+                TokenType::Less => self.chunk.write(ops::OP_LESS, location.line),
+                TokenType::LessEqual => self.chunk.write(ops::OP_LESS_EQUAL, location.line),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
-                        token_type.as_string())));
+                        token_type.as_string()), location));
                 }
             }
         }
     }
 
-    fn expr_interpolated_string(&mut self, interp: expr::InterpolatedString) {
+    fn expr_interpolated_string(&mut self, interp: expr::InterpolatedString, location: Location) {
         //If empty, push empty string literal
         if interp.segments.is_empty() {
             self.expr_literal(expr::Literal 
             { 
                 value: ast::LiteralType::String(String::from(""))
-            });
+            }, location);
         }
         else {
             let mut first: bool = true;
@@ -257,7 +258,7 @@ impl<'a> Compiler<'a> {
                     first = false;
                 }
                 else {
-                    self.chunk.write(ops::OP_CONCAT);
+                    self.chunk.write(ops::OP_CONCAT, location.line);
                 }
             }
         }
@@ -267,15 +268,22 @@ impl<'a> Compiler<'a> {
 //Statements
 impl<'a> Compiler<'a> {
     fn stmt_expression(&mut self, stmt: stmt::Expression) {
+        let location = stmt.expression.location();
+
         //Compile expression
         self.expr(*stmt.expression);
+
+        //Push pop
+        self.chunk.write(ops::OP_POP, location.line);
     }
 
     fn stmt_print(&mut self, stmt: stmt::Print) {
+        let location = stmt.expression.location();
+
         //Compile expression
         self.expr(*stmt.expression);
 
         //Push print
-        self.chunk.write(ops::OP_PRINT);
+        self.chunk.write(ops::OP_PRINT, location.line);
     }
 }

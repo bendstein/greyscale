@@ -11,6 +11,8 @@ pub enum Op {
     #[default]
     Return,
     Print,
+    //Internal
+    Pop,
 
 
     //Unary operators ----------------
@@ -99,6 +101,8 @@ pub const OP_CONSTANT_LONG: u8  = 1;
 //Keywords ---------------------------
 pub const OP_RETURN: u8         = 10;
 pub const OP_PRINT: u8          = 11;
+//Internal
+pub const OP_POP: u8            = 12;
 
 
 //Unary operators --------------------
@@ -148,7 +152,8 @@ lazy_static! {
         //Keywords -----------------------------
         (OP_RETURN, Op::Return),
         (OP_PRINT, Op::Print),
-
+        //Internal
+        (OP_POP, Op::Pop),
 
         //Unary operators ----------------------
         //Arithmetic
@@ -196,6 +201,8 @@ lazy_static! {
         //Keywords -----------------------------
         (Op::Return, "OP_RETURN"),
         (Op::Print, "OP_PRINT"),
+        //Internal
+        (Op::Pop, "OP_POP"),
 
 
         //Unary operators ----------------------

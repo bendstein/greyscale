@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use crate::token::token_type::StringType;
 use crate::token::{Token, token_type::TokenType};
-use crate::vm::error::GreyscaleError;
+use crate::vm::error::{GreyscaleError};
+use crate::location::Location;
 
 use super::{symbols, LexerState};
 
@@ -12,6 +13,7 @@ pub struct InterpStringLexer<'a> {
     current: usize,
     line: usize,
     end: usize,
+    column: usize,
     started: bool,
     terminated: bool,
     program: Rc<Vec<&'a str>>
@@ -23,6 +25,7 @@ impl<'a> InterpStringLexer<'a> {
             start: 0,
             current: 0,
             line: 0,
+            column: 0,
             end: program.len(),
             started: false,
             terminated: false,
@@ -32,9 +35,10 @@ impl<'a> InterpStringLexer<'a> {
 
     pub fn with_state(mut self, state: LexerState) -> Self {
         self.start = state.start;
-        self.current = state.start;
+        self.current = state.current;
         self.end = state.end;
         self.line = state.line;
+        self.column = state.column;
         self
     }
 
@@ -43,14 +47,16 @@ impl<'a> InterpStringLexer<'a> {
         self.current = 0;
         self.end = self.program.len();
         self.line = 0;
+        self.column = 0;
         self
     }
 
     pub fn set_state(&mut self, state: LexerState) {
         self.start = state.start;
-        self.current = state.start;
+        self.current = state.current;
         self.end = state.end;
         self.line = state.line;
+        self.column = state.column;
     }
         
     pub fn get_state(&self) -> LexerState {
@@ -58,7 +64,8 @@ impl<'a> InterpStringLexer<'a> {
             start: self.start,
             current: self.current,
             end: self.end,
-            line: self.line
+            line: self.line,
+            column: self.column
         }
     }
 
@@ -71,7 +78,7 @@ impl<'a> InterpStringLexer<'a> {
         else if self.is_at_end() {
             //Mark string as terminated to prevent infinite errors
             self.terminated = true;
-            return Some(Err(GreyscaleError::CompileErr("Unterminated interpolated string literal.".to_string())));
+            return Some(Err(self.make_error("Unterminated interpolated string literal.".to_string())));
         }
 
         //Match first backtick
@@ -82,7 +89,7 @@ impl<'a> InterpStringLexer<'a> {
             else {
                 //Mark string as terminated to prevent infinite errors
                 self.terminated = true;
-                return Some(Err(GreyscaleError::CompileErr("Expected a backtick to start the interpolated string literal.".to_string())));
+                return Some(Err(self.make_error("Expected a backtick to start the interpolated string literal.".to_string())));
             }
         }
 
@@ -95,7 +102,7 @@ impl<'a> InterpStringLexer<'a> {
             else if self.is_at_end() {
                 //Mark string as terminated to prevent infinite errors
                 self.terminated = true;
-                return Some(Err(GreyscaleError::CompileErr("Unterminated interpolated string literal.".to_string())));
+                return Some(Err(self.make_error("Unterminated interpolated string literal.".to_string())));
             }
         }
 
@@ -179,7 +186,7 @@ impl<'a> InterpStringLexer<'a> {
 
         if let Some(open) = self.advance() {
             if open != symbols::L_BRACE {
-                return Err(GreyscaleError::CompileErr("Invalid start of interpolated {} segment.".to_string()));
+                return Err(self.make_error("Invalid start of interpolated {} segment.".to_string()));
             }
 
             control_stack.push(open);
@@ -236,7 +243,13 @@ impl<'a> InterpStringLexer<'a> {
                             }
                         },
                         //Otherwise, consume character as part of string
-                        _ => { }
+                        _ => 
+                        { 
+                            //On newline, increment line and advabce
+                            if matches!(next, "\n" | "\r\n") {
+                                self.advance_line();
+                            }
+                        }
                     }
                 }
                 else {
@@ -248,7 +261,7 @@ impl<'a> InterpStringLexer<'a> {
             if !control_stack.is_empty() {
                 //If reached this point, whole string was consumed. Mark as terminated.
                 self.terminated = true;
-                Err(GreyscaleError::CompileErr("Mismatched curly braces.".to_string()))
+                Err(self.make_error("Mismatched curly braces.".to_string()))
             }
             else {
                 //Remove outer braces
@@ -256,7 +269,7 @@ impl<'a> InterpStringLexer<'a> {
             }
         }
         else {
-            Err(GreyscaleError::CompileErr("Invalid interpolated segment.".to_string()))
+            Err(self.make_error("Invalid interpolated segment.".to_string()))
         }
     }
 
@@ -289,6 +302,7 @@ impl<'a> InterpStringLexer<'a> {
     }
     
     fn advance_n(&mut self, n: isize) -> Option<&'a str> {
+        self.column = self.column.checked_add_signed(n).unwrap_or(0);
         self.current = self.current.checked_add_signed(n).unwrap_or(self.start);
         self.current()
     }
@@ -325,7 +339,7 @@ impl<'a> InterpStringLexer<'a> {
             }
             //On new line, increment line and advance
             else if matches!(next, "\n" | "\r\n") {
-                self.line += 1;
+                self.advance_line();
                 self.advance();
                 continue;
             }
@@ -356,8 +370,8 @@ impl<'a> InterpStringLexer<'a> {
                     
                     while let Some(next) = self.advance() {
                         if matches!(next, "\n" | "\r\n") {
-                            self.line += 1;
-                            
+                            self.advance_line();
+
                             //If this is not a block comment, then the comment is finished
                             if !is_block {
                                 terminated = true;
@@ -382,7 +396,7 @@ impl<'a> InterpStringLexer<'a> {
                     }
                     
                     if is_block && !terminated {
-                        return Err(GreyscaleError::CompileErr("Unterminated block comment".to_string()));
+                        return Err(self.make_error("Unterminated block comment".to_string()));
                     }
                     
                     continue;
@@ -393,6 +407,18 @@ impl<'a> InterpStringLexer<'a> {
         }
         
         Ok(())
+    }
+
+    fn make_error(&self, message: String) -> GreyscaleError {
+        GreyscaleError::CompileErr(message, Location {
+            column: self.start,
+            line: self.column
+        })
+    }
+
+    fn advance_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
     }
 
     pub fn is_at_end(&self) -> bool {

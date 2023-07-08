@@ -1,11 +1,11 @@
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Metadata {
-    newlines: Vec<usize>
+    newlines: Vec<(usize, usize)>
 }
 
 impl Metadata {
-    pub fn new_line(&mut self, index: usize) {
-        self.newlines.push(index);
+    pub fn new_line(&mut self, index: usize, line: usize) {
+        self.newlines.push((index, line));
     }
 
     pub fn get_line(&self, index: usize) -> usize {
@@ -16,26 +16,31 @@ impl Metadata {
             let mut lower_bound = 0;
             let mut start = 0;
             let mut end = self.newlines.len() - 1;
-            let mut at_start = self.newlines[start];
-            let mut at_end = self.newlines[end];
+            let (mut at_start, _) = self.newlines[start];
+            let (mut at_end, _) = self.newlines[end];
+
+            let found_index: Option<usize>;
 
             loop {
                 if index == at_start {
-                    return start + 1;
+                    found_index = Some(start);
+                    break;
                 }
                 else if index >= at_end {
-                    return end + 1;
+                    found_index = Some(end);
+                    break;
                 }
                 else if index < at_start || end - start <= 1 {
-                    return lower_bound;
+                    found_index = Some(lower_bound);
+                    break;
                 }
                 else {
                     let midpoint = start + ((end - start) / 2);
-                    let at_midpoint = self.newlines[midpoint];
+                    let (at_midpoint, _) = self.newlines[midpoint];
                     
                     if at_midpoint > index {
                         end = midpoint - 1;
-                        at_end = self.newlines[end];
+                        (at_end, _) = self.newlines[end];
                     }
                     else {
                         start = midpoint;
@@ -44,6 +49,23 @@ impl Metadata {
                     }
                 }
             }
+
+            if let Some(findx) = found_index {
+                if findx < self.newlines.len() {
+                    return self.newlines[findx].1;
+                }
+            }
+
+            0_usize
+        }
+    }
+
+    pub fn current_line(&self) -> usize {
+        if let Some((_, line)) = self.newlines.last() {
+            *line
+        }
+        else {
+            0_usize
         }
     }
 

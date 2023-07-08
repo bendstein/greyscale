@@ -12,15 +12,16 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn write(&mut self, code: u8) {
+    pub fn write(&mut self, code: u8, line: usize) {
+        self.metadata.new_line(self.count(), line);
         self.code.push(code);
     }
 
-    pub fn write_u16(&mut self, code: u16) {
+    pub fn write_u16(&mut self, code: u16, line: usize) {
         let a1 = ((code >> 8) & 0xFF) as u8;
         let a2 = (code & 0xFF) as u8;
-        self.write(a1);
-        self.write(a2);
+        self.write(a1, line);
+        self.write(a2, line);
     }
 
     pub fn add_const(&mut self, constant: Value) -> usize {

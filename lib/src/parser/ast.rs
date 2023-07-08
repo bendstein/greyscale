@@ -1,3 +1,5 @@
+use crate::location::Location;
+
 #[derive(Debug)]
 pub struct AST {
     pub statements: Vec<Node>
@@ -22,6 +24,13 @@ impl Node {
         match self {
             Node::Expression(expr) => format!("Expression ({})", expr.name()),
             Node::Statement(stmt) => format!("Statement ({})", stmt.name()),
+        }
+    }
+
+    pub fn location(&self) -> Location {
+        match self {
+            Node::Expression(expr) => expr.location(),
+            Node::Statement(stmt) => stmt.location()
         }
     }
 }
@@ -50,33 +59,47 @@ impl LiteralType {
 }
 
 pub mod expression {
+    use crate::location::Location;
     use crate::token::Token;
     use super::LiteralType;
     use super::statement;
 
     #[derive(Debug)]
     pub enum ExprNode {
-        Binary(Binary),
-        Unary(Unary),
-        Assignment(Assignment),
-        Literal(Literal),
-        InterpolatedString(InterpolatedString),
-        Identifier(Identifier),
-        Function(Function),
-        Call(Call)
+        Binary(Binary, Location),
+        Unary(Unary, Location),
+        Assignment(Assignment, Location),
+        Literal(Literal, Location),
+        InterpolatedString(InterpolatedString, Location),
+        Identifier(Identifier, Location),
+        Function(Function, Location),
+        Call(Call, Location)
     }
 
     impl ExprNode {
         pub fn name(&self) -> String {
             match self {
-                Self::Binary(_) => String::from("Binary"),
-                Self::Unary(_) => String::from("Unary"),
-                Self::Assignment(_) => String::from("Assignment"),
-                Self::Literal(lit) => format!("{} Literal", lit.value.name()),
-                Self::InterpolatedString(_) => String::from("Interpolated String"),
-                Self::Identifier(_) => String::from("Identifier"),
-                Self::Function(_) => String::from("Function"),
-                Self::Call(_) => String::from("Call")
+                Self::Binary(_, _) => String::from("Binary"),
+                Self::Unary(_, _) => String::from("Unary"),
+                Self::Assignment(_, _) => String::from("Assignment"),
+                Self::Literal(lit, _) => format!("{} Literal", lit.value.name()),
+                Self::InterpolatedString(_, _) => String::from("Interpolated String"),
+                Self::Identifier(_, _) => String::from("Identifier"),
+                Self::Function(_, _) => String::from("Function"),
+                Self::Call(_, _) => String::from("Call")
+            }
+        }
+
+        pub fn location(&self) -> Location {
+            match self {
+                Self::Binary(_, l) => *l,
+                Self::Unary(_, l) => *l,
+                Self::Assignment(_, l) => *l,
+                Self::Literal(_, l) => *l,
+                Self::InterpolatedString(_, l) => *l,
+                Self::Identifier(_, l) => *l,
+                Self::Function(_, l) => *l,
+                Self::Call(_, l) => *l
             }
         }
     }
@@ -135,36 +158,51 @@ pub mod expression {
 }
 
 pub mod statement {
-    use crate::token::Token;
+    use crate::{token::Token, location::Location};
     use super::expression::ExprNode;
 
     #[derive(Debug)]
     pub enum StmtNode {
-        Block(Block),
-        Conditional(Conditional),
-        Keyword(Keyword),
-        Declaration(Declaration),
-        Expression(Expression),
-        For(For),
-        While(While),
-        Loop(Loop),
-        Return(Return),
-        Print(Print)
+        Block(Block, Location),
+        Conditional(Conditional, Location),
+        Keyword(Keyword, Location),
+        Declaration(Declaration, Location),
+        Expression(Expression, Location),
+        For(For, Location),
+        While(While, Location),
+        Loop(Loop, Location),
+        Return(Return, Location),
+        Print(Print, Location)
     }
 
     impl StmtNode {
         pub fn name(&self) -> String {
             match self {
-                StmtNode::Block(_) => String::from("Block"),
-                StmtNode::Conditional(_) => String::from("Conditional"),
-                StmtNode::Keyword(_) => String::from("Keyword"),
-                StmtNode::Declaration(_) => String::from("Declaration"),
-                StmtNode::Expression(_) => String::from("Expression"),
-                StmtNode::For(_) => String::from("For"),
-                StmtNode::While(_) => String::from("While"),
-                StmtNode::Loop(_) => String::from("Loop"),
-                StmtNode::Return(_) => String::from("Return"),
-                StmtNode::Print(_) => String::from("Print"),
+                StmtNode::Block(_, _) => String::from("Block"),
+                StmtNode::Conditional(_, _) => String::from("Conditional"),
+                StmtNode::Keyword(_, _) => String::from("Keyword"),
+                StmtNode::Declaration(_, _) => String::from("Declaration"),
+                StmtNode::Expression(_, _) => String::from("Expression"),
+                StmtNode::For(_, _) => String::from("For"),
+                StmtNode::While(_, _) => String::from("While"),
+                StmtNode::Loop(_, _) => String::from("Loop"),
+                StmtNode::Return(_, _) => String::from("Return"),
+                StmtNode::Print(_, _) => String::from("Print"),
+            }
+        }
+
+        pub fn location(&self) -> Location {
+            match self {
+                Self::Block(_, l) => *l,
+                Self::Conditional(_, l) => *l,
+                Self::Keyword(_, l) => *l,
+                Self::Declaration(_, l) => *l,
+                Self::Expression(_, l) => *l,
+                Self::For(_, l) => *l,
+                Self::While(_, l) => *l,
+                Self::Loop(_, l) => *l,
+                Self::Return(_, l) => *l,
+                Self::Print(_, l) => *l
             }
         }
     }

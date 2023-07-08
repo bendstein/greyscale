@@ -4,7 +4,8 @@ use std::rc::Rc;
 use crate::constants;
 use crate::token::token_type::{Base, StringType};
 use crate::token::{Token, token_type::TokenType};
-use crate::vm::error::GreyscaleError;
+use crate::vm::error::{GreyscaleError};
+use crate::location::Location;
 
 pub mod symbols;
 pub mod interpolated_string_lexer;
@@ -14,6 +15,7 @@ pub struct Lexer<'a> {
     start: usize,
     current: usize,
     line: usize,
+    column: usize,
     end: usize,
     program: Rc<Vec<&'a str>>
 }
@@ -23,6 +25,7 @@ pub struct LexerState {
     pub start: usize,
     pub current: usize,
     pub line: usize,
+    pub column: usize,
     pub end: usize,
 }
 
@@ -32,6 +35,7 @@ impl<'a> Lexer<'a> {
             start: 0,
             current: 0,
             line: 0,
+            column: 0,
             end: program.len(),
             program
         }
@@ -39,9 +43,10 @@ impl<'a> Lexer<'a> {
 
     pub fn with_state(mut self, state: LexerState) -> Self {
         self.start = state.start;
-        self.current = state.start;
+        self.current = state.current;
         self.end = state.end;
         self.line = state.line;
+        self.column = state.column;
         self
     }
 
@@ -50,14 +55,16 @@ impl<'a> Lexer<'a> {
         self.current = 0;
         self.end = self.program.len();
         self.line = 0;
+        self.column = 0;
         self
     }
 
     pub fn set_state(&mut self, state: LexerState) {
         self.start = state.start;
-        self.current = state.start;
+        self.current = state.current;
         self.end = state.end;
         self.line = state.line;
+        self.column = state.column;
     }
         
     pub fn get_state(&self) -> LexerState {
@@ -65,7 +72,8 @@ impl<'a> Lexer<'a> {
             start: self.start,
             current: self.current,
             end: self.end,
-            line: self.line
+            line: self.line,
+            column: self.column
         }
     }
 
@@ -244,9 +252,14 @@ impl<'a> Lexer<'a> {
                     return Some(self.match_identifier());
                 }
 
-                Some(Err(GreyscaleError::CompileErr(format!("Unexpected character '{}'", &self.current().unwrap_or_default()))))
+                Some(Err(self.make_error(format!("Unexpected character '{}'", &self.current().unwrap_or_default()))))
             }
         }       
+    }
+
+    pub fn scan_ws_comment(&mut self) -> Result<(), GreyscaleError> {
+        self.start = self.current;
+        self.skip_comment_whitespace()
     }
 
     pub fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
@@ -262,7 +275,7 @@ impl<'a> Lexer<'a> {
             }
             //On new line, increment line and advance
             else if matches!(next, "\n" | "\r\n") {
-                self.line += 1;
+                self.advance_line();
                 self.advance();
                 continue;
             }
@@ -293,7 +306,7 @@ impl<'a> Lexer<'a> {
                     
                     while let Some(next) = self.advance() {
                         if matches!(next, "\n" | "\r\n") {
-                            self.line += 1;
+                            self.advance_line();
                             
                             //If this is not a block comment, then the comment is finished
                             if !is_block {
@@ -319,7 +332,7 @@ impl<'a> Lexer<'a> {
                     }
                     
                     if is_block && !terminated {
-                        return Err(GreyscaleError::CompileErr("Unterminated block comment".to_string()));
+                        return Err(self.make_error("Unterminated block comment".to_string()));
                     }
                     
                     continue;
@@ -361,6 +374,7 @@ impl<'a> Lexer<'a> {
     }
     
     fn advance_n(&mut self, n: isize) -> Option<&'a str> {
+        self.column = self.column.checked_add_signed(n).unwrap_or(0);
         self.current = self.current.checked_add_signed(n).unwrap_or(self.start);
         self.current()
     }
@@ -413,7 +427,7 @@ impl<'a> Lexer<'a> {
                     control_stack.push(symbols::BACKTICK);
                     Ok(StringType::Interpolated)
                 },
-                _ => Err(GreyscaleError::CompileErr("Invalid start of string.".to_string()))
+                _ => Err(self.make_error("Invalid start of string.".to_string()))
             }?;
             
             let mut closed = false;
@@ -475,7 +489,7 @@ impl<'a> Lexer<'a> {
                     break;
                 }
                 else if matches!(next, "\n" | "\r\n") {
-                    self.line += 1;
+                    self.advance_line();
                 }
                 //Do not close string on escaped quote
                 else if next == symbols::B_SLASH {
@@ -484,7 +498,7 @@ impl<'a> Lexer<'a> {
             }
             
             if !closed {
-                Err(GreyscaleError::CompileErr("Unterminated string literal".to_string()))
+                Err(self.make_error("Unterminated string literal".to_string()))
             }
             else {
                 //Omit quotes from string tokens, except for interpolated
@@ -497,7 +511,7 @@ impl<'a> Lexer<'a> {
             }
         }
         else {
-            Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+            Err(self.make_error("Unexpected end of input".to_string()))
         }
     }
     
@@ -510,7 +524,7 @@ impl<'a> Lexer<'a> {
         //Match first digit
         if let Some(next) = self.advance() {
             let first_digit = next.parse::<u8>()
-                .map_err(|_| GreyscaleError::CompileErr("Expected a digit".to_string()))?;              
+                .map_err(|_| self.make_error("Expected a digit".to_string()))?;              
             
             let mut seen_digit = false;
             
@@ -550,7 +564,7 @@ impl<'a> Lexer<'a> {
                     //If a digit hasn't been seen yet, this is invalid
                     if !seen_digit {
                         let _ = self.advance();
-                        return Err(GreyscaleError::CompileErr("Expected a digit".to_string()));
+                        return Err(self.make_error("Expected a digit".to_string()));
                     }
                     
                     //If next symbol is a digit, this is a decimal point
@@ -560,7 +574,7 @@ impl<'a> Lexer<'a> {
                             //Cannot have multiple decimal points
                             if dot_location.is_some() {
                                 let _ = self.advance();
-                                return Err(GreyscaleError::CompileErr("Number cannot have multiple radix points.".to_string()));
+                                return Err(self.make_error("Number cannot have multiple radix points.".to_string()));
                             }
                             
                             //Record the location of the radix point
@@ -587,14 +601,14 @@ impl<'a> Lexer<'a> {
             }
             
             if !seen_digit {
-                Err(GreyscaleError::CompileErr("Expected a digit".to_string()))
+                Err(self.make_error("Expected a digit".to_string()))
             }
             else {
                 Ok(self.make_token(TokenType::Number(number_start..self.current, dot_location, base)))
             }
         }
         else {
-            Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+            Err(self.make_error("Unexpected end of input".to_string()))
         }
     }
     
@@ -604,7 +618,7 @@ impl<'a> Lexer<'a> {
         //Match first char
         if let Some(next) = self.advance() {
             if !Self::is_alpha(next) {
-                Err(GreyscaleError::CompileErr(format!("Unexpected symbol {next}")))
+                Err(self.make_error(format!("Unexpected symbol {next}")))
             }
             else {
                 while let Some(next) = self.peek() {
@@ -625,7 +639,7 @@ impl<'a> Lexer<'a> {
             }
         }
         else {
-            Err(GreyscaleError::CompileErr("Unexpected end of input".to_string()))
+            Err(self.make_error("Unexpected end of input".to_string()))
         }
     }
 
@@ -695,6 +709,18 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    fn advance_line(&mut self) {
+        self.line += 1;
+        self.column = 0;
+    }
+
+    fn make_error(&self, message: String) -> GreyscaleError {
+        GreyscaleError::CompileErr(message, Location {
+            column: self.column,
+            line: self.line
+        })
+    }
+
     pub fn is_at_end(&self) -> bool {
         self.current >= self.end || 
             self.current >= self.program.len()
@@ -743,21 +769,21 @@ impl<'a> LexerIterWithHistory<'a> {
         self.set_position(0);
     }
 
-    pub fn clear_up_to_current(&mut self) {
-
-        if constants::TRACE 
-        {
-            println!("Truncating lexer history. History Len: {}; Truncating first {} entries", self.history.len(), self.n + 1);
-        }
-
-        self.history = self.history.iter()
-            .skip(self.n + 1)
-            .cloned()
-            .collect();
-
+    pub fn clear(&mut self) {
         if constants::TRACE {
-            println!("Remaining items in lexer history: {}", self.history.len());
+            println!("Clear lexer history.");
         }
+
+        //Move lexer to current position
+        if self.n + 1 < self.history.len() {
+            let current_state = &self.history[self.n + 1];
+
+            if let Some(state) = current_state {
+                self.lexer.set_state(state.state);
+            }
+        }
+
+        self.history.clear();
 
         self.set_position(0);
     }
@@ -810,14 +836,19 @@ impl<'a> LexerIterWithHistory<'a> {
                 if constants::TRACE {
                     if let Some(item) = current.clone() {
                         if let Ok(token) = item.token {
-                            println!("Current Token: {}", token.token_type().as_program_string(&self.lexer.program));
+                            println!("(Line: {}, Col: {}) Current Token: {}", 
+                                item.state.line, item.state.column,
+                                token.token_type().as_program_string(&self.lexer.program));
                         }
                         else {
-                            println!("Current Token: Err");
+                            println!("(Line: {}, Col: {}) Current Token: Err",
+                                item.state.line, item.state.column);
                         }
                     } 
                     else {
-                        println!("Current Token: None");
+                        let current_state = self.lexer.get_state();
+                        println!("(Line: {}, Col: {}) Current Token: None",
+                            current_state.line, current_state.column);
                     }
                 }
             }
@@ -833,10 +864,12 @@ impl<'a> LexerIterWithHistory<'a> {
     pub fn peek_n(&mut self, n: isize) -> Option<Result<Token, GreyscaleError>> {
         self.n.checked_add_signed(n)?;
         let n_original = self.n;
+        //let state_original = self.lexer.get_state();
 
         let result = self.move_by(n);
 
         self.set_position(n_original);
+        //self.lexer.set_state(state_original);
 
         if let Some(item) = result {
             Some(item.token)
@@ -844,6 +877,19 @@ impl<'a> LexerIterWithHistory<'a> {
         else {
             None
         }
+    }
+
+    pub fn peek_at(&mut self, n: usize) -> Option<Result<Token, GreyscaleError>> {
+        let current = self.n;
+        
+        let move_by = if n >= current {
+            (n - current) as isize
+        }
+        else {
+            -((current - n) as isize)
+        };
+
+        self.peek_n(move_by)
     }
 
     pub fn advance(&mut self) -> Option<LexerIterWithHistoryItem> {
@@ -880,19 +926,31 @@ impl<'a> LexerIterWithHistory<'a> {
     }
 
     fn lex(&mut self) -> Option<LexerIterWithHistoryItem> {
+        //Advance through whitespace to get accurate start column for next token
+        let start_state = self.lexer.get_state();
+
+        if let Err(lexerr) = self.lexer.scan_ws_comment() {
+            return Some(LexerIterWithHistoryItem::new(start_state, &Err(lexerr)));
+        }
+
         let current_state = self.lexer.get_state();
+
         let scanned = self.lexer.scan_token();
+        let new_state = self.lexer.get_state();
+
+        let line = current_state.line;
+        let column = current_state.column;
 
         if let Some(token) = scanned {
-
             if constants::TRACE {
                 let token_result = token.clone();
 
                 if let Ok(token) = token_result {
-                    println!(" -- Lexed Token: {}", token.token_type().as_program_string(&self.lexer.program));
+                    println!(" -- (Line: {}, Col: {}) Lexed Token: {}", line, column, 
+                        token.token_type().as_program_string(&self.lexer.program));
                 }
                 else {
-                    println!(" -- Lexed Token: Err");
+                    println!(" -- (Line: {}, Col: {}) Lexed Token: Err", line, column);
                 }
             }
 
@@ -903,7 +961,7 @@ impl<'a> LexerIterWithHistory<'a> {
             self.history.push(None);
 
             if constants::TRACE {
-                println!(" -- Lexed Token: None");
+                println!(" -- (Line: {}, Col: {}) Lexed Token: None", line, column);
             }
 
             None

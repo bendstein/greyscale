@@ -1,10 +1,11 @@
-use std::{rc::Rc, borrow::Borrow};
+use std::{rc::Rc};
 
-use crate::{chunk::{Chunk, disassemble::FormattableInstr}, ops::Op, value::{Value, object::Object}, constants};
+use crate::{chunk::{Chunk, disassemble::FormattableInstr}, ops::Op, value::{Value, object::Object}, constants, location::Location};
 
-use self::error::GreyscaleError;
+use self::{error::GreyscaleError, settings::VMSettings};
 
 pub mod error;
+pub mod settings;
 
 type GreyscaleResult = std::result::Result<(), GreyscaleError>;
 
@@ -12,20 +13,26 @@ type GreyscaleResult = std::result::Result<(), GreyscaleError>;
 pub struct VirtualMachine {
     chunk: Chunk,
     ip: usize,
-    stack: Vec<Value>
+    stack: Vec<Value>,
+    settings: VMSettings
 }
 
 impl VirtualMachine {
     pub fn new(chunk: Chunk) -> Self {
+        Self::new_with_settings(chunk, VMSettings::default())
+    }
+
+    pub fn new_with_settings(chunk: Chunk, settings: VMSettings) -> Self {
         Self {
             chunk,
             ip: 0,
-            stack: Vec::new()
+            stack: Vec::new(),
+            settings
         }
     }
 
     pub fn move_next(&mut self) -> Option<u8> {
-        if self.ip >= self.chunk.count() {
+        if self.is_at_end() {
             None
         }
         else {
@@ -50,7 +57,8 @@ impl VirtualMachine {
                         self.push_value(value)?;
                     }
                     else {
-                        return Err(GreyscaleError::RuntimeErr("Expected the address of a constant.".to_string()));
+                        
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
                 Op::ConstantLong => {
@@ -61,11 +69,11 @@ impl VirtualMachine {
                             self.push_value(value)?;
                         }
                         else {
-                            return Err(GreyscaleError::RuntimeErr("Expected the 16-bit address of a constant.".to_string()));
+                            return Err(self.make_error("Expected the 16-bit address of a constant.".to_string()));
                         }
                     }
                     else {
-                        return Err(GreyscaleError::RuntimeErr("Expected the address of a constant.".to_string()));
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
 
@@ -86,7 +94,16 @@ impl VirtualMachine {
                         println!("\n----End VM Output----\n");
                     }
                 },
+                //Internal
+                Op::Pop => {
+                    //(For REPL) If pop is the last instruction, and ignore final pop is enabled, don't pop
+                    if self.is_at_end() && self.settings.ignore_final_pop {
 
+                    }
+                    else {
+                        let _ = self.pop_value();                        
+                    }
+                },
 
                 //Unary operators  -----------------------------------------------------------------
                 //Arithmetic
@@ -126,7 +143,7 @@ impl VirtualMachine {
 
                 //Other
                 Op::Unknown(n) => {
-                    return Err(GreyscaleError::RuntimeErr(format!("Invalid instruction '{n}'.")));
+                    return Err(self.make_error(format!("Invalid instruction '{n}'.")));
                 },
             };
         }
@@ -143,7 +160,7 @@ impl VirtualMachine {
             Ok(constant)
         }
         else {
-            Err(GreyscaleError::RuntimeErr(format!("Failed to find constant at '{n}'.")))
+            Err(self.make_error(format!("Failed to find constant at '{n}'.")))
         }
     }
 
@@ -160,11 +177,11 @@ impl VirtualMachine {
                             self.push_value(Value::Int(-n))?;
                             Ok(())
                         },
-                        _ => Err(GreyscaleError::RuntimeErr(format!("Cannot apply unary operator {op} to argument.")))
+                        _ => Err(self.make_error(format!("Cannot apply unary operator {op} to argument.")))
                     }
                 }
                 else {
-                    Err(GreyscaleError::RuntimeErr("Expected an argument.".to_string()))
+                    Err(self.make_error("Expected an argument.".to_string()))
                 }
             },
             Op::LogicalNot => {
@@ -174,11 +191,11 @@ impl VirtualMachine {
                             self.push_value(Value::Bool(!b))?;
                             Ok(()) 
                         },
-                        _ => Err(GreyscaleError::RuntimeErr(format!("Cannot apply unary operator {op} to argument.")))
+                        _ => Err(self.make_error(format!("Cannot apply unary operator {op} to argument.")))
                     }
                 }
                 else {
-                    Err(GreyscaleError::RuntimeErr("Expected an argument.".to_string()))
+                    Err(self.make_error("Expected an argument.".to_string()))
                 }
             },
             Op::BitwiseNot => {
@@ -188,14 +205,14 @@ impl VirtualMachine {
                             self.push_value(Value::Int(!n))?;
                             Ok(()) 
                         },
-                        _ => Err(GreyscaleError::RuntimeErr(format!("Cannot apply unary operator {op} to argument.")))
+                        _ => Err(self.make_error(format!("Cannot apply unary operator {op} to argument.")))
                     }
                 }
                 else {
-                    Err(GreyscaleError::RuntimeErr("Expected an argument.".to_string()))
+                    Err(self.make_error("Expected an argument.".to_string()))
                 }
             },
-            _ => Err(GreyscaleError::RuntimeErr(format!("Invalid unary operator {op}")))
+            _ => Err(self.make_error(format!("Invalid unary operator {op}")))
         }
     }
 
@@ -206,7 +223,7 @@ impl VirtualMachine {
                 Ok(val)
             }
             else {
-                Err(GreyscaleError::RuntimeErr("Expected an argument.".to_string()))
+                Err(self.make_error("Expected an argument.".to_string()))
             }
         };
 
@@ -243,7 +260,7 @@ impl VirtualMachine {
                     return Ok(());
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Subtract => {
                 if let Value::Int(a) = val_a {
@@ -267,7 +284,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Multiply => {
                 if let Value::Int(a) = val_a {
@@ -291,7 +308,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Divide => {
                 if let Value::Int(a) = val_a {
@@ -315,7 +332,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Modulus => {
                 if let Value::Int(a) = val_a {
@@ -339,7 +356,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::LogicalAnd => {
                 if let Value::Bool(a) = val_a {
@@ -355,7 +372,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::LogicalOr => {
                 if let Value::Bool(a) = val_a {
@@ -371,7 +388,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::LogicalXor => {
                 if let Value::Bool(a) = val_a {
@@ -381,7 +398,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::BitwiseAnd => {
                 if let Value::Int(a) = val_a {
@@ -391,7 +408,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::BitwiseOr => {
                 if let Value::Int(a) = val_a {
@@ -401,7 +418,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::BitwiseXor => {
                 if let Value::Int(a) = val_a {
@@ -411,7 +428,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::BitwiseLShift => {
                 if let Value::Int(a) = val_a {
@@ -421,7 +438,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::BitwiseRShift => {
                 if let Value::Int(a) = val_a {
@@ -431,7 +448,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Equal => {
                 if Value::Null == val_a || Value::Null == val_b {
@@ -469,7 +486,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::NotEqual => {
                 if Value::Null == val_a || Value::Null == val_b {
@@ -507,7 +524,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Greater => {
                 if let Value::Int(a) = val_a {
@@ -531,7 +548,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Less => {
                 if let Value::Int(a) = val_a {
@@ -555,7 +572,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::GreaterEqual => {
                 if let Value::Int(a) = val_a {
@@ -579,7 +596,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },            
             Op::LessEqual => {
                 if let Value::Int(a) = val_a {
@@ -603,7 +620,7 @@ impl VirtualMachine {
                     }
                 }
 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
             Op::Concat => {
                 //If either value is a string, concatenate them
@@ -615,15 +632,15 @@ impl VirtualMachine {
                     return Ok(());
                 }
                 
-                Err(GreyscaleError::RuntimeErr("Operation is not valid for given types.".to_string()))
+                Err(self.make_error("Operation is not valid for given types.".to_string()))
             },
-            _ => Err(GreyscaleError::RuntimeErr(format!("Invalid binary operator {op}")))
+            _ => Err(self.make_error(format!("Invalid binary operator {op}")))
         }
     }
 
     fn push_value(&mut self, value: Value) -> GreyscaleResult {
         if self.stack.len() == constants::MAX_STACK {
-            return Err(GreyscaleError::RuntimeErr("Stack overflow".to_string()));
+            return Err(self.make_error("Stack overflow".to_string()));
         }
 
         self.stack.push(value);
@@ -633,6 +650,21 @@ impl VirtualMachine {
 
     fn pop_value(&mut self) -> Option<Value> {
         self.stack.pop()
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.ip >= self.chunk.count()
+    }
+
+    fn get_line(&self) -> usize {
+        self.chunk.metadata.get_line(self.ip)
+    }
+
+    fn make_error(&self, message: String) -> GreyscaleError {
+        GreyscaleError::RuntimeErr(message, Location {
+            column: 0,
+            line: self.get_line()
+        })
     }
 
     // fn reset_stack(&mut self) {
