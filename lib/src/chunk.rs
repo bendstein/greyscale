@@ -41,6 +41,10 @@ impl Chunk {
         }
     }
 
+    pub fn count_consts(&self) -> usize {
+        self.constants.count()
+    }
+
     pub fn count(&self) -> usize {
         self.code.len()
     }

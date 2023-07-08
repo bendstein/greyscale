@@ -480,7 +480,7 @@ impl<'a> Lexer<'a> {
                             }
                             
                             //Record the location of the radix point
-                            dot_location = Some(self.current - start);
+                            dot_location = Some(self.current - number_start);
                             seen_digit = true;
                             let _ = self.advance_n(2);
                             continue;

@@ -4,7 +4,6 @@ use crate::{vm::error::GreyscaleError, lexer::{Lexer, LexerIterWithHistory, inte
 use ast::{AST, Node};
 use ast::expression::ExprNode;
 use ast::statement::StmtNode;
-use unicode_segmentation::UnicodeSegmentation;
 
 use self::ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::Expression};
 
@@ -56,14 +55,11 @@ impl<'a> Parser<'a> {
         parser.parse_program()
     }
 
-    pub fn parse_expression(expression: &'a str) -> Result<ExprNode, GreyscaleError> {
-        let gprogram: Vec<&str> = expression.graphemes(true).collect();
-        let rcprogram = Rc::from(gprogram);
-
-        let lexer = Lexer::new(Rc::clone(&rcprogram));
+    pub fn parse_expression(expression: Rc<Vec<&'a str>>) -> Result<ExprNode, GreyscaleError> {
+        let lexer = Lexer::new(Rc::clone(&expression));
 
         let mut parser = Self {
-            program: Rc::clone(&rcprogram),
+            program: Rc::clone(&expression),
             lexer: LexerIterWithHistory::new(lexer),
             errors: Vec::new()
         };
@@ -542,13 +538,19 @@ impl<'a> Parser<'a> {
             if let Some(radix) = dot_location {
                 let mut n: f64 = 0_f64;
 
-                let start_exp: i32 = (radix - range.start) as i32;
-                let end_exp: i32 = -((range.end - radix) as i32);
+                let start_exp: i32 = *radix as i32;
+                let end_exp: i32 = (range.end - range.start - radix) as i32;
                 
-                for (index, i) in (start_exp..end_exp).enumerate() {
+                for (index, i) in (0..start_exp).enumerate() {
                     let d = self.program[range.start + index];
                     let digit = get_digit(d);
-                    n += (digit as f64) * (base_num as f64).powi(end_exp - 1 - i);
+                    n += (digit as f64) * (base_num as f64).powi(*radix as i32 - 1 - i);
+                }
+
+                for (index, i) in (1..end_exp).enumerate() {
+                    let d = self.program[range.start + *radix + 1 + index];
+                    let digit = get_digit(d);
+                    n += (digit as f64) / (base_num as f64).powi(i);
                 }
 
                 return Ok(ExprNode::Literal(Literal {
