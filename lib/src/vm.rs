@@ -72,8 +72,19 @@ impl VirtualMachine {
 
                 //Keywords  ------------------------------------------------------------------------
                 Op::Return => {
-                    println!("{}", self.pop_value().unwrap_or_default());
+                    //println!("{}", self.pop_value().unwrap_or_default());
                     return Ok(());
+                },
+                Op::Print => {
+                    if constants::TRACE {
+                        println!("\n------VM Output------\n");
+                    }
+
+                    println!("{}", self.pop_value().unwrap_or_default());
+
+                    if constants::TRACE {
+                        println!("\n----End VM Output----\n");
+                    }
                 },
 
 

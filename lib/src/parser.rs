@@ -1,11 +1,11 @@
 use std::rc::Rc;
 
-use crate::{vm::error::GreyscaleError, lexer::{Lexer, LexerIterWithHistory, interpolated_string_lexer::InterpStringLexer, LexerState}, token::{Token, token_type::{TokenType, Base, StringType}}};
+use crate::{vm::error::GreyscaleError, lexer::{Lexer, LexerIterWithHistory, interpolated_string_lexer::InterpStringLexer, LexerState}, token::{Token, token_type::{TokenType, Base, StringType}}, constants};
 use ast::{AST, Node};
 use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::Expression}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -63,6 +63,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_program(&mut self) -> Result<AST, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Program");
+        }
+
         let mut statements: Vec<Node> = Vec::new();
 
         fn inner(parser: &mut Parser<'_>) -> Result<Node, GreyscaleError> {
@@ -90,8 +94,57 @@ impl<'a> Parser<'a> {
                 },
             }
 
+            //If tracing, output error count, statement count, and tokens
+            if constants::TRACE {
+                println!("--------------------------------------------");
+                println!("Current error count: {}.", self.errors.len());
+                println!("Current statement count: {}.", statements.len());
+
+                let mut tokens: String = String::new();
+
+                let position = self.lexer.current_position();
+
+                for (i, maybe_item) in self.lexer.history().iter().enumerate() {
+
+                    if i > position {
+                        break;
+                    }
+
+                    let s: String = if let Some(item) = maybe_item.clone() {
+                        if let Ok(token) = item.token {
+                            token.token_type().as_program_string(&self.program)
+                        }
+                        else {
+                            String::from("Err")
+                        }
+                    }
+                    else {
+                        String::from("None")
+                    };
+
+                    if i > 0 {
+                        tokens = format!("{tokens}, {s}");
+                    }
+                    else {
+                        tokens = s;
+                    }
+                }
+
+                println!("Tokens in previous statement: {tokens}");
+                
+                if statements.is_empty() {
+                    println!("Previous statement type: None");
+                }
+                else {
+                    println!("Previous statement type: {}", statements.last().unwrap().name());
+                }
+
+                println!("--------------------------------------------");
+            }
+
             //Clear saved token history after each statement
-            self.lexer.clear();
+            // self.lexer.clear();
+            self.lexer.clear_up_to_current();
         }
 
         if self.errors.is_empty() {
@@ -103,56 +156,44 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        let maybe_expr_stmt = self.expression_statement()?;
+        if constants::TRACE {
+            println!("Parser: Statement");
+        }
 
-        if let Some(expr_stmt) = maybe_expr_stmt {
+        //Try match print statement
+        if let Some(print_stmt) = self.print_statement()? {
+            return Ok(Some(print_stmt));
+        }
+
+        //Try match expression statement
+        if let Some(expr_stmt) = self.expression_statement()? {
             return Ok(Some(expr_stmt));
         }
 
         Ok(None)
     }
 
-    fn expression_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        let start_position = self.lexer.current_position();
-
-        //Match an expression
-        let maybe_expr = self.expression()?;
-
-        if let Some(expr) = maybe_expr {
-            //Match a semicolon
-            if let Some(token) = self.lexer.current_token() {
-                let semitoken = token?;
-
-                if semitoken.token_type() == &TokenType::Semi {
-                    //self.lexer.advance();
-
-                    return Ok(Some(StmtNode::Expression(Expression {
-                        expression: Box::new(expr)
-                    })));
-                }
-            }
-            //If implicit final semicolons are enabled, don't require a semicolon
-            else if self.settings.allow_implicit_final_semicolon {
-                return Ok(Some(StmtNode::Expression(Expression {
-                    expression: Box::new(expr)
-                })));
-            }
-
-            //No semicolon was found
-            return Err(GreyscaleError::CompileErr("Expected a semicolon.".to_string()));
+    fn expression(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: expression");
         }
 
-        //Not an expression statement
-        self.lexer.set_position(start_position);
-        Ok(None)
-    }
-
-    fn expression(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
         //Start at lowest priority
         self.assignment_expr()
     }
 
+    fn is_at_end(&self) -> bool {
+        self.lexer.is_at_end()
+    }
+}
+
+//Expression types
+impl<'a> Parser<'a> {
     fn assignment_expr(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Assignment Expression");
+        }
+
         let start_position = self.lexer.current_position();
 
         //Match id assignment_op expression 
@@ -195,10 +236,18 @@ impl<'a> Parser<'a> {
     }
 
     fn binary_op(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Binary Infix Expression");
+        }
+
         self.binary_op_priority(0)
     }
 
     fn binary_op_priority(&mut self, priority: usize) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Binary Infix Expression {priority}");
+        }
+
         let start_position = self.lexer.current_position();
 
         fn call_next(parser: &mut Parser<'_>, current_priority: usize) -> Result<Option<ExprNode>, GreyscaleError> {
@@ -270,6 +319,10 @@ impl<'a> Parser<'a> {
     }
 
     fn prefix(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Unary Prefix Expression");
+        }
+
         let start_position = self.lexer.current_position();
 
         //Collect unary prefixes of the same priority
@@ -311,6 +364,10 @@ impl<'a> Parser<'a> {
     }
 
     fn call(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Call Expression");
+        }
+
         let start_position = self.lexer.current_position();
 
         //Match expression of next priority
@@ -412,6 +469,10 @@ impl<'a> Parser<'a> {
     }
 
     fn func(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Fucntion Expression");
+        }
+
         let maybe_func = self.func_inline()?;
 
         if let Some(func) = maybe_func {
@@ -429,16 +490,28 @@ impl<'a> Parser<'a> {
     }
 
     fn func_inline(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Lambda Expression");
+        }
+
         //TODO
         Ok(None)
     }
 
     fn func_block(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Function Block Expression");
+        }
+
         //TODO
         Ok(None)
     }
 
     fn primary(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Primary Expression");
+        }
+
         let start_position = self.lexer.current_position();
 
         if let Some(token) = self.lexer.current_token() {
@@ -513,6 +586,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_number(&self, token: Token) -> Result<ExprNode, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Number Expression");
+        }
+
         let token_type = token.token_type();
 
         if let TokenType::Number(range, dot_location, base) = token_type {
@@ -590,6 +667,10 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_string(&self, token: Token) -> Result<ExprNode, GreyscaleError>  {
+        if constants::TRACE {
+            println!("Parser: String Expression");
+        }
+
         let token_type = token.token_type().clone();
 
         if let TokenType::String(range, string_type) = token_type {
@@ -675,8 +756,94 @@ impl<'a> Parser<'a> {
         
         Err(GreyscaleError::CompileErr("Expected a string.".to_string()))
     }
+}
 
-    fn is_at_end(&self) -> bool {
-        self.lexer.is_at_end()
+//Statement types
+impl<'a> Parser<'a>  {
+    fn expression_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Expression Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match an expression
+        let maybe_expr = self.expression()?;
+
+        if let Some(expr) = maybe_expr {
+            //Match semicolon, allowing implicit if enabled
+            self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+            
+            //Return expression statement
+            return Ok(Some(StmtNode::Expression(Expression {
+                expression: Box::new(expr)
+            })));
+        }
+
+        //Not an expression statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn print_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Print Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match keyword print
+        if let Some(token) = self.lexer.current_token() {
+            let printtoken = token?;
+
+            if printtoken.token_type() == &TokenType::Print {
+                //Advance lexer
+                self.lexer.advance();
+
+                //Match an expression
+                let maybe_expr = self.expression()?;
+
+                if let Some(expr) = maybe_expr {
+                    //Match semicolon, allowing implicit if enabled
+                    self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+
+                    //Return print statement
+                    return Ok(Some(StmtNode::Print(Print {
+                        expression: Box::new(expr)
+                    })));
+                }
+            }
+        }
+
+        //Not an expression statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Semicolon");
+        }
+
+        //Match a semicolon
+        if let Some(token) = self.lexer.current_token() {
+            let semitoken = token?;
+
+            if semitoken.token_type() == &TokenType::Semi {
+                
+                if self.lexer.peek().is_none() {
+                    self.lexer.advance();
+                }
+
+                return Ok(());
+            }
+        }
+        //If implicit final semicolons are enabled, don't require a semicolon
+        else if allow_implicit {
+            return Ok(());
+        }
+
+        //No semicolon was found
+        Err(GreyscaleError::CompileErr("Expected a semicolon.".to_string()))
     }
 }

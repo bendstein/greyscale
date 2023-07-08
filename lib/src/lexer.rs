@@ -1,6 +1,7 @@
 use std::ops::Range;
 use std::rc::Rc;
 
+use crate::constants;
 use crate::token::token_type::{Base, StringType};
 use crate::token::{Token, token_type::TokenType};
 use crate::vm::error::GreyscaleError;
@@ -739,12 +740,30 @@ impl<'a> LexerIterWithHistory<'a> {
     }
 
     pub fn zero(&mut self) {
-        self.n = 0;
+        self.set_position(0);
     }
 
-    pub fn clear(&mut self) {
-        self.history.clear();
-        self.n = 0;
+    pub fn clear_up_to_current(&mut self) {
+
+        if constants::TRACE 
+        {
+            println!("Truncating lexer history. History Len: {}; Truncating first {} entries", self.history.len(), self.n + 1);
+        }
+
+        self.history = self.history.iter()
+            .skip(self.n + 1)
+            .cloned()
+            .collect();
+
+        if constants::TRACE {
+            println!("Remaining items in lexer history: {}", self.history.len());
+        }
+
+        self.set_position(0);
+    }
+
+    pub fn history(&self) -> Vec<Option<LexerIterWithHistoryItem>> {
+        self.history.clone()
     }
 
     pub fn current(&mut self) -> Option<LexerIterWithHistoryItem> {
@@ -784,8 +803,23 @@ impl<'a> LexerIterWithHistory<'a> {
 
         if end > self.n {
             for i in self.n..=end {
-                self.n = i;
+                self.set_position(i);
+
                 current = Some(self.current()?);
+
+                if constants::TRACE {
+                    if let Some(item) = current.clone() {
+                        if let Ok(token) = item.token {
+                            println!("Current Token: {}", token.token_type().as_program_string(&self.lexer.program));
+                        }
+                        else {
+                            println!("Current Token: Err");
+                        }
+                    } 
+                    else {
+                        println!("Current Token: None");
+                    }
+                }
             }
         }
 
@@ -802,7 +836,7 @@ impl<'a> LexerIterWithHistory<'a> {
 
         let result = self.move_by(n);
 
-        self.n = n_original;
+        self.set_position(n_original);
 
         if let Some(item) = result {
             Some(item.token)
@@ -825,16 +859,15 @@ impl<'a> LexerIterWithHistory<'a> {
     }
 
     pub fn set_position(&mut self, n: usize) {
-        self.n = n
+        if constants::TRACE && self.n != n {
+            println!(" -- Lexer: {} -> {n}", self.n);
+        }
+
+        self.n = n;
     }
 
     pub fn get_inner_state(&self) -> LexerState {
         self.lexer.get_state()
-    }
-
-    pub fn clear_inner_and_set_state(&mut self, new_state: LexerState) {
-        self.clear();
-        self.lexer.set_state(new_state);
     }
 
     pub fn skip_comment_whitespace(&mut self) -> Result<(), GreyscaleError> {
@@ -851,11 +884,28 @@ impl<'a> LexerIterWithHistory<'a> {
         let scanned = self.lexer.scan_token();
 
         if let Some(token) = scanned {
+
+            if constants::TRACE {
+                let token_result = token.clone();
+
+                if let Ok(token) = token_result {
+                    println!(" -- Lexed Token: {}", token.token_type().as_program_string(&self.lexer.program));
+                }
+                else {
+                    println!(" -- Lexed Token: Err");
+                }
+            }
+
             self.history.push(Some(LexerIterWithHistoryItem::new(current_state, &token)));
             self.history.last().unwrap().clone()
         }
         else {
             self.history.push(None);
+
+            if constants::TRACE {
+                println!(" -- Lexed Token: None");
+            }
+
             None
         }
     }

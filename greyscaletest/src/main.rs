@@ -3,7 +3,7 @@ extern crate unicode_segmentation;
 use std::rc::Rc;
 use greyscale::compiler::Compiler;
 use greyscale::parser::settings::ParserSettings;
-use greyscale::vm;
+use greyscale::{vm, constants};
 use unicode_segmentation::UnicodeSegmentation;
 
 use greyscale::parser::Parser;
@@ -11,9 +11,13 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program = "
-        5 + 6;
-        6 + 7
+        print 5 + 6;
+        print 8 * 9;
     ";
+
+    if constants::TRACE {
+        println!("Program: {program}");
+    }
 
     let graphemes = program.graphemes(true).collect::<Vec<&str>>();
     let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);

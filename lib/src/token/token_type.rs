@@ -145,6 +145,15 @@ impl TokenType {
             TokenType::Return => symbols::RETURN.to_string(),
         }
     }
+
+    pub fn as_program_string(&self, program: &[&str]) -> String {
+        match self {
+            Self::Identifier(range) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
+            Self::String(range, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
+            Self::Number(range, _, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
+            _ => self.as_string()
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]

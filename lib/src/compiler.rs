@@ -110,6 +110,9 @@ impl<'a> Compiler<'a> {
             StmtNode::Expression(expression) => {
                 self.stmt_expression(expression);
             },
+            StmtNode::Print(print) => {
+                self.stmt_print(print);
+            },
             StmtNode::For(_) => {
                 self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string()));
             },
@@ -266,5 +269,13 @@ impl<'a> Compiler<'a> {
     fn stmt_expression(&mut self, stmt: stmt::Expression) {
         //Compile expression
         self.expr(*stmt.expression);
+    }
+
+    fn stmt_print(&mut self, stmt: stmt::Print) {
+        //Compile expression
+        self.expr(*stmt.expression);
+
+        //Push print
+        self.chunk.write(ops::OP_PRINT);
     }
 }

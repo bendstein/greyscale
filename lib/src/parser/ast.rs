@@ -17,6 +17,15 @@ pub enum Node {
     Statement(Box<statement::StmtNode>)
 }
 
+impl Node {
+    pub fn name(&self) -> String {
+        match self {
+            Node::Expression(expr) => format!("Expression ({})", expr.name()),
+            Node::Statement(stmt) => format!("Statement ({})", stmt.name()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum LiteralType {
     Void,
@@ -25,6 +34,19 @@ pub enum LiteralType {
     String(String),
     Double(f64),
     Integer(i64)
+}
+
+impl LiteralType {
+    pub fn name(&self) -> String {
+        match self {
+            LiteralType::Void => String::from("Void"),
+            LiteralType::Null => String::from("Null"),
+            LiteralType::Boolean(_) => String::from("Boolean"),
+            LiteralType::String(_) => String::from("String"),
+            LiteralType::Double(_) => String::from("Double"),
+            LiteralType::Integer(_) => String::from("Integer"),
+        }
+    }
 }
 
 pub mod expression {
@@ -42,6 +64,21 @@ pub mod expression {
         Identifier(Identifier),
         Function(Function),
         Call(Call)
+    }
+
+    impl ExprNode {
+        pub fn name(&self) -> String {
+            match self {
+                Self::Binary(_) => String::from("Binary"),
+                Self::Unary(_) => String::from("Unary"),
+                Self::Assignment(_) => String::from("Assignment"),
+                Self::Literal(lit) => format!("{} Literal", lit.value.name()),
+                Self::InterpolatedString(_) => String::from("Interpolated String"),
+                Self::Identifier(_) => String::from("Identifier"),
+                Self::Function(_) => String::from("Function"),
+                Self::Call(_) => String::from("Call")
+            }
+        }
     }
 
     #[derive(Debug)]
@@ -111,7 +148,25 @@ pub mod statement {
         For(For),
         While(While),
         Loop(Loop),
-        Return(Return)
+        Return(Return),
+        Print(Print)
+    }
+
+    impl StmtNode {
+        pub fn name(&self) -> String {
+            match self {
+                StmtNode::Block(_) => String::from("Block"),
+                StmtNode::Conditional(_) => String::from("Conditional"),
+                StmtNode::Keyword(_) => String::from("Keyword"),
+                StmtNode::Declaration(_) => String::from("Declaration"),
+                StmtNode::Expression(_) => String::from("Expression"),
+                StmtNode::For(_) => String::from("For"),
+                StmtNode::While(_) => String::from("While"),
+                StmtNode::Loop(_) => String::from("Loop"),
+                StmtNode::Return(_) => String::from("Return"),
+                StmtNode::Print(_) => String::from("Print"),
+            }
+        }
     }
 
     #[derive(Debug)]
@@ -169,5 +224,10 @@ pub mod statement {
     #[derive(Debug)]
     pub struct Return {
         pub expression: Option<Box<ExprNode>>
+    }
+
+    #[derive(Debug)]
+    pub struct Print {
+        pub expression: Box<ExprNode>
     }
 }

@@ -10,6 +10,7 @@ pub enum Op {
     //Keywords -----------------------
     #[default]
     Return,
+    Print,
 
 
     //Unary operators ----------------
@@ -96,7 +97,8 @@ pub const OP_CONSTANT_LONG: u8  = 1;
 
 
 //Keywords ---------------------------
-pub const OP_RETURN: u8         = 2;
+pub const OP_RETURN: u8         = 10;
+pub const OP_PRINT: u8          = 11;
 
 
 //Unary operators --------------------
@@ -145,6 +147,7 @@ lazy_static! {
 
         //Keywords -----------------------------
         (OP_RETURN, Op::Return),
+        (OP_PRINT, Op::Print),
 
 
         //Unary operators ----------------------
@@ -192,6 +195,7 @@ lazy_static! {
 
         //Keywords -----------------------------
         (Op::Return, "OP_RETURN"),
+        (Op::Print, "OP_PRINT"),
 
 
         //Unary operators ----------------------

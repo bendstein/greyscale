@@ -58,6 +58,7 @@ impl Chunk {
 
             //Keywords --------------------------------------------------------
             Op::Return => self.disassemble_instr_simple(op, offset, f),
+            Op::Print => self.disassemble_instr_simple(op, offset, f),
 
 
             //Unary operators -------------------------------------------------
