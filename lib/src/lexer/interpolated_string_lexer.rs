@@ -1,9 +1,10 @@
+use std::rc::Rc;
+
 use crate::token::token_type::StringType;
 use crate::token::{Token, token_type::TokenType};
-use crate::util::string::GraphemeString;
 use crate::vm::error::GreyscaleError;
 
-use super::symbols;
+use super::{symbols, LexerState};
 
 #[derive(Debug, Clone)]
 pub struct InterpStringLexer<'a> {
@@ -13,11 +14,11 @@ pub struct InterpStringLexer<'a> {
     end: usize,
     started: bool,
     terminated: bool,
-    program: &'a GraphemeString<'a>
+    program: Rc<Vec<&'a str>>
 }
 
 impl<'a> InterpStringLexer<'a> {
-    pub fn new(program: &'a GraphemeString<'a>) -> Self {
+    pub fn new(program: Rc<Vec<&'a str>>) -> Self {
         Self {
             start: 0,
             current: 0,
@@ -29,24 +30,36 @@ impl<'a> InterpStringLexer<'a> {
         }
     }
 
-    pub fn move_range(mut self, start: usize, end: usize, line: usize) -> Self {
-        self.start = start;
-        self.current = start;
-        self.end = end;
-        self.line = line;
-        self.started = false;
-        self.terminated = false;
+    pub fn with_state(mut self, state: LexerState) -> Self {
+        self.start = state.start;
+        self.current = state.start;
+        self.end = state.end;
+        self.line = state.line;
         self
     }
 
-    pub fn reset_range(mut self) -> Self {
+    pub fn with_reset_state(mut self) -> Self {
         self.start = 0;
         self.current = 0;
         self.end = self.program.len();
         self.line = 0;
-        self.started = false;
-        self.terminated = false;
         self
+    }
+
+    pub fn set_state(&mut self, state: LexerState) {
+        self.start = state.start;
+        self.current = state.start;
+        self.end = state.end;
+        self.line = state.line;
+    }
+        
+    pub fn get_state(&self) -> LexerState {
+        LexerState {
+            start: self.start,
+            current: self.current,
+            end: self.end,
+            line: self.line
+        }
     }
 
     pub fn scan_token(&mut self) -> Option<Result<Token, GreyscaleError>> {
@@ -92,7 +105,7 @@ impl<'a> InterpStringLexer<'a> {
             symbols::L_BRACE => {
                 //Do not start an interpolated segment on an escaped left brace
                 if self.match_symbol(symbols::L_BRACE) {
-                    let start = if self.program.char_at(self.start) == symbols::BACKTICK {
+                    let start = if self.program[self.start] == symbols::BACKTICK {
                         self.start + 1
                     }
                     else {
@@ -108,7 +121,7 @@ impl<'a> InterpStringLexer<'a> {
                 }
             },
             symbols::R_BRACE => {
-                let start = if self.program.char_at(self.start) == symbols::BACKTICK {
+                let start = if self.program[self.start] == symbols::BACKTICK {
                     self.start + 1
                 }
                 else {
@@ -266,7 +279,7 @@ impl<'a> InterpStringLexer<'a> {
                 None
             }
             else {
-                Some(self.program.char_at(sum))
+                Some(self.program[sum])
             }
         }
     }

@@ -1,8 +1,8 @@
 use std::ops::Range;
+use std::rc::Rc;
 
 use crate::token::token_type::{Base, StringType};
 use crate::token::{Token, token_type::TokenType};
-use crate::util::string::GraphemeString;
 use crate::vm::error::GreyscaleError;
 
 pub mod symbols;
@@ -14,19 +14,19 @@ pub struct Lexer<'a> {
     current: usize,
     line: usize,
     end: usize,
-    program: GraphemeString<'a>
+    program: Rc<Vec<&'a str>>
 }
 
 #[derive(Debug, Default, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct LexerState {
-    start: usize,
-    current: usize,
-    line: usize,
-    end: usize,
+    pub start: usize,
+    pub current: usize,
+    pub line: usize,
+    pub end: usize,
 }
 
 impl<'a> Lexer<'a> {
-    pub fn new(program: GraphemeString<'a>) -> Self {
+    pub fn new(program: Rc<Vec<&'a str>>) -> Self {
         Self {
             start: 0,
             current: 0,
@@ -247,10 +247,6 @@ impl<'a> Lexer<'a> {
             }
         }       
     }
-    
-    pub fn program(&self) -> &GraphemeString<'a> {
-        &self.program
-    }
 
     fn current(&self) -> Option<&'a str> {
         self.peek_n(-1)
@@ -271,7 +267,7 @@ impl<'a> Lexer<'a> {
                 None
             }
             else {
-                Some(self.program.char_at(sum))
+                Some(self.program[sum])
             }
         }
     }
@@ -407,7 +403,13 @@ impl<'a> Lexer<'a> {
                 Err(GreyscaleError::CompileErr("Unterminated string literal".to_string()))
             }
             else {
-                Ok(self.make_token(TokenType::String(start..self.current, string_type)))
+                //Omit quotes from string tokens, except for interpolated
+                let range = match string_type {
+                    StringType::Interpolated => start..self.current,
+                    _ => start + 1..self.current - 1
+                };
+
+                Ok(self.make_token(TokenType::String(range, string_type)))
             }
         }
         else {
@@ -536,7 +538,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn get_keyword(&self, range: Range<usize>) -> Option<TokenType> {
-        let id = self.program.substring(&range);
+        let id = self.program[range].join("");
         let id = id.as_str();
 
         match id {
@@ -810,16 +812,21 @@ impl<'a> LexerIterWithHistory<'a> {
         self.move_by(-1)
     }
 
-    pub fn program(&self) -> &GraphemeString<'a> {
-        self.lexer.program()
-    }
-
     pub fn current_position(&self) -> usize {
         self.n
     }
 
     pub fn set_position(&mut self, n: usize) {
         self.n = n
+    }
+
+    pub fn get_inner_state(&self) -> LexerState {
+        self.lexer.get_state()
+    }
+
+    pub fn clear_inner_and_set_state(&mut self, new_state: LexerState) {
+        self.clear();
+        self.lexer.set_state(new_state);
     }
 
     pub fn is_at_end(&self) -> bool {

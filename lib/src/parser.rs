@@ -1,13 +1,17 @@
-use crate::{vm::error::GreyscaleError, util::string::GraphemeString, lexer::{Lexer, LexerIterWithHistory}, token::{Token, token_type::{TokenType, Base, StringType}}};
-use ast::{AST, Node};
-use ast::expression::{ExprNode};
-use ast::statement::{StmtNode};
+use std::rc::Rc;
 
-use self::ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier}, LiteralType, statement::Expression};
+use crate::{vm::error::GreyscaleError, lexer::{Lexer, LexerIterWithHistory, interpolated_string_lexer::InterpStringLexer, LexerState}, token::{Token, token_type::{TokenType, Base, StringType}}};
+use ast::{AST, Node};
+use ast::expression::ExprNode;
+use ast::statement::StmtNode;
+use unicode_segmentation::UnicodeSegmentation;
+
+use self::ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::Expression};
 
 pub mod ast;
 
 pub struct Parser<'a> {
+    program: Rc<Vec<&'a str>>,
     lexer: LexerIterWithHistory<'a>,
     errors: Vec<GreyscaleError>
 }
@@ -40,11 +44,14 @@ lazy_static! {
 }
 
 impl<'a> Parser<'a> {
-    pub fn parse(program: &'a str) -> Result<AST, Vec<GreyscaleError>> {
-        let gprogram = GraphemeString::new(program);
-        let lexer = Lexer::new(gprogram);
+    pub fn parse(program: &'a str) -> Result<AST, GreyscaleError> {
+        let gprogram: Vec<&str> = program.graphemes(true).collect();
+        let rcprogram = Rc::from(gprogram);
+
+        let lexer = Lexer::new(Rc::clone(&rcprogram));
 
         let mut parser = Self {
+            program: Rc::clone(&rcprogram),
             lexer: LexerIterWithHistory::new(lexer),
             errors: Vec::new()
         };
@@ -52,7 +59,23 @@ impl<'a> Parser<'a> {
         parser.parse_program()
     }
 
-    fn parse_program(&mut self) -> Result<AST, Vec<GreyscaleError>> {
+    pub fn parse_expression(expression: &'a str) -> Result<ExprNode, GreyscaleError> {
+        let gprogram: Vec<&str> = expression.graphemes(true).collect();
+        let rcprogram = Rc::from(gprogram);
+
+        let lexer = Lexer::new(Rc::clone(&rcprogram));
+
+        let mut parser = Self {
+            program: Rc::clone(&rcprogram),
+            lexer: LexerIterWithHistory::new(lexer),
+            errors: Vec::new()
+        };
+
+        parser.expression()?
+            .ok_or_else(|| GreyscaleError::CompileErr("Expected an expression".to_string()))
+    }
+
+    fn parse_program(&mut self) -> Result<AST, GreyscaleError> {
         let mut statements: Vec<Node> = Vec::new();
 
         fn inner(parser: &mut Parser<'_>) -> Result<Node, GreyscaleError> {
@@ -79,7 +102,7 @@ impl<'a> Parser<'a> {
             Ok(AST::new(statements))
         }
         else {
-            Err(self.errors.clone())
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
         }
     }
 
@@ -428,46 +451,17 @@ impl<'a> Parser<'a> {
                 })));
             }
             //Match literals
-            else if let TokenType::String(range, string_type) = token_type {
+            else if let TokenType::String(_, _) = token_type {
                 self.lexer.advance();
-
-                let content = self.program().substring(range);
-
-                match string_type {
-                    StringType::Literal => {
-                        return Ok(Some(ExprNode::Literal(Literal {
-                            value: LiteralType::String(content)
-                        })));
-                    },
-                    StringType::Interpolated => {
-                        return Err(GreyscaleError::CompileErr("Interpolated strings are not yet supported".to_string()));
-                    },
-                    StringType::InterpolatedSegment => {
-                        return Err(GreyscaleError::CompileErr("Interpolated strings are not yet supported".to_string()));
-                    },
-                    StringType::Escaped => {
-                        return Err(GreyscaleError::CompileErr("Escape sequences are not yet supported".to_string()));
-                    },
-                }
+                
+                //Handle string literal
+                return self.parse_string(primary_token).map(Some);
             }
-            else if let TokenType::Number(range, number_base) = token_type {
+            else if let TokenType::Number(_, _) = token_type {
                 self.lexer.advance();
 
-                let content = self.program().substring(range);
-
-                match number_base {
-                    Base::Decimal => {
-                        return Ok(Some(ExprNode::Literal(Literal {
-                            value: LiteralType::Double(content.parse::<f64>().unwrap())
-                        })))
-                    },
-                    Base::Binary => {
-                        return Err(GreyscaleError::CompileErr("Binary numbers are not yet supported".to_string()));
-                    },
-                    Base::Hexadecimal => {
-                        return Err(GreyscaleError::CompileErr("Hex numbers are not yet supported".to_string()));
-                    },
-                }
+                //Handle number literal
+                return self.parse_number(primary_token).map(Some);
             }
             else if token_type == &TokenType::True {
                 self.lexer.advance();
@@ -498,7 +492,6 @@ impl<'a> Parser<'a> {
                         let rparen_token = token?;
 
                         if rparen_token.token_type() == &TokenType::RParen {
-
                             //Return the expression inside of the parentheses
                             return Ok(Some(inner));
                         }
@@ -515,8 +508,111 @@ impl<'a> Parser<'a> {
         Ok(None)
     }
 
-    fn program(&self) -> &GraphemeString<'a> {
-        self.lexer.program()
+    fn parse_number(&self, token: Token) -> Result<ExprNode, GreyscaleError> {
+        let token_type = token.token_type();
+
+        if let TokenType::Number(_range, base) = token_type {
+            
+            match base {
+                Base::Decimal => {
+                    todo!()
+                },
+                Base::Binary => {
+                    todo!()
+                },
+                Base::Hexadecimal => {
+                    todo!()
+                },
+            }
+        }
+
+        Err(GreyscaleError::CompileErr("Expected a number.".to_string()))
+    }
+
+    fn parse_string(&self, token: Token) -> Result<ExprNode, GreyscaleError>  {
+        let token_type = token.token_type().clone();
+
+        if let TokenType::String(range, string_type) = token_type {
+
+            match string_type {
+                StringType::Literal => {
+                    let content = self.program[range].join("");
+                    return Ok(ExprNode::Literal(Literal {
+                        value: LiteralType::String(content)
+                    }));
+                },
+                StringType::Interpolated => {
+                    let mut segments: Vec<ExprNode> = Vec::new();
+
+                    //Create a tokenizer for the interpolated string, positioned at the current token
+                    let interp_lexer = InterpStringLexer::new(self.program.clone())
+                        .with_state(LexerState {
+                            start: range.start,
+                            current: range.start,
+                            line: self.lexer.get_inner_state().line,
+                            end: range.end
+                        });
+
+                    //Recursively parse subtokens
+                    for interp_token_result in interp_lexer {
+                        let interp_token = interp_token_result?;
+
+                        if let TokenType::String(interp_range, segment_type) = interp_token.token_type() {
+                            let token_lexer = Lexer::new(self.program.clone())
+                                .with_state(LexerState {
+                                    start: interp_range.start,
+                                    current: interp_range.start,
+                                    line: self.lexer.get_inner_state().line,
+                                    end: interp_range.end
+                                });
+
+                            let mut token_parser = Self {
+                                program: self.program.clone(),
+                                lexer: LexerIterWithHistory::new(token_lexer),
+                                errors: Vec::new()
+                            };
+
+                            let expr = match segment_type {
+                                //Recursively parse expression
+                                StringType::InterpolatedSegment => {
+                                    token_parser.expression()?
+                                        .ok_or_else(|| GreyscaleError::CompileErr("Expected an expression".to_string()))
+                                },
+                                //Handle segment as string
+                                _ => token_parser.parse_string(interp_token)
+                            }?;
+
+                            segments.push(expr);
+                        }
+                        else {
+                            return Err(GreyscaleError::CompileErr("Unexpected token in interpolated string.".to_string()));
+                        }
+                    }
+
+                    //If no segments, return an empty string literal, otherwise
+                    //return an interpolated string with each concatenated segment
+                    if segments.is_empty() {
+                        return Ok(ExprNode::Literal(Literal {
+                            value: LiteralType::String("".to_string())
+                        }));
+                    }
+                    else {
+                        return Ok(ExprNode::InterpolatedString(InterpolatedString 
+                        { 
+                            segments
+                        }));
+                    }
+                },
+                StringType::InterpolatedSegment => {
+                    return Err(GreyscaleError::CompileErr("Unexpected token.".to_string()));
+                },
+                StringType::Escaped => {
+                    return Err(GreyscaleError::CompileErr("Escape sequences are not yet supported".to_string()));
+                },
+            }
+        }
+        
+        Err(GreyscaleError::CompileErr("Expected a string.".to_string()))
     }
 
     fn is_at_end(&self) -> bool {

@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{lexer::symbols, util::string::GraphemeString};
+use crate::{lexer::symbols};
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub enum TokenType {
@@ -143,15 +143,6 @@ impl TokenType {
             TokenType::Func => symbols::FUNC.to_string(),
             TokenType::Print => symbols::PRINT.to_string(),
             TokenType::Return => symbols::RETURN.to_string(),
-        }
-    }
-
-    pub fn as_program_string(&self, program: &GraphemeString) -> String {
-        match self {
-            TokenType::Identifier(r) => program.substring(r),
-            TokenType::String(r, _) => program.substring(r),
-            TokenType::Number(r, _) => program.substring(r),
-            _ => self.as_string()
         }
     }
 }

@@ -1,5 +1,4 @@
 use self::token_type::TokenType;
-use crate::util::string::{GraphemeString};
 use std::ops::Range;
 
 pub mod token_type;
@@ -32,7 +31,7 @@ impl Token {
         self.line
     }
 
-    pub fn get_value(&self, string: &GraphemeString) -> String {
-        string.substring(&self.range)
+    pub fn get_value(&self, string: &[&str]) -> String {
+        string[self.range.clone()].join("")
     }
 }

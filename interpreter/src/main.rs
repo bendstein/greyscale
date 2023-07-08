@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read};
 
-use greyscale::{vm::VirtualMachine, chunk::Chunk};
+use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, chunk::Chunk};
 
 fn main() -> Result<(), String> {
     let args: Vec<String> = std::env::args()
@@ -33,15 +33,27 @@ fn main() -> Result<(), String> {
 
     let mut vm = VirtualMachine::new(c);
 
-    vm.execute()
-        .map_err(|err| {
-            match err {
-                greyscale::vm::error::GreyscaleError::CompileErr(ce) => {
-                    format!("A compile error occurred: {ce}")
-                },
-                greyscale::vm::error::GreyscaleError::RuntimeErr(re) => {
-                    format!("A runtime error occurred: {re}")
-                },
+    fn handle_err(err: GreyscaleError) -> String {
+        match err {
+            GreyscaleError::CompileErr(ce) => {
+                format!("A compile error occurred: {ce}")
+            },
+            GreyscaleError::RuntimeErr(re) => {
+                format!("A runtime error occurred: {re}")
+            },
+            GreyscaleError::AggregateErr(inner) => {
+                let mut messages: Vec<String> = Vec::new();
+
+                for i in inner {
+                    let message = handle_err(i);
+                    messages.push(message);
+                }
+
+                format!("One or more errors occurred:\n    {}", messages.join("\n    "))
             }
-        })
+        }
+    }
+
+    vm.execute()
+        .map_err(handle_err)
 }
