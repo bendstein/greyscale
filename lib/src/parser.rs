@@ -188,20 +188,15 @@ impl<'a> Parser<'a> {
 
     fn location_at_position(&self, position: usize) -> Location {
         let history: Vec<LexerIterWithHistoryItem> = self.lexer.history().iter()
-            .map_while(|h| h.clone())
+            .take_while(|h| h.is_some())
+            .map(|h| h.clone().unwrap())
             .collect();
 
-        if history.is_empty() {
+        if history.is_empty() || position >= history.len() {
+            let state = self.lexer.get_inner_state();
             Location {
-                column: 0,
-                line: 0
-            }
-        }
-        else if position >= history.len() {
-            let last = history.last().unwrap();
-            Location {
-                column: last.state.column,
-                line: last.state.line
+                column: state.column,
+                line: state.line
             }
         }
         else {
