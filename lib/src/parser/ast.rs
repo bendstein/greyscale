@@ -163,46 +163,61 @@ pub mod statement {
 
     #[derive(Debug)]
     pub enum StmtNode {
-        Block(Block, Location),
-        Conditional(Conditional, Location),
-        Keyword(Keyword, Location),
-        Declaration(Declaration, Location),
-        Expression(Expression, Location),
-        For(For, Location),
-        While(While, Location),
-        Loop(Loop, Location),
-        Return(Return, Location),
-        Print(Print, Location)
+        Block(Block, Location, Location),
+        Conditional(Conditional, Location, Location),
+        Keyword(Keyword, Location, Location),
+        Declaration(Declaration, Location, Location),
+        Expression(Expression, Location, Location),
+        For(For, Location, Location),
+        While(While, Location, Location),
+        Loop(Loop, Location, Location),
+        Return(Return, Location, Location),
+        Print(Print, Location, Location)
     }
 
     impl StmtNode {
         pub fn name(&self) -> String {
             match self {
-                StmtNode::Block(_, _) => String::from("Block"),
-                StmtNode::Conditional(_, _) => String::from("Conditional"),
-                StmtNode::Keyword(_, _) => String::from("Keyword"),
-                StmtNode::Declaration(_, _) => String::from("Declaration"),
-                StmtNode::Expression(_, _) => String::from("Expression"),
-                StmtNode::For(_, _) => String::from("For"),
-                StmtNode::While(_, _) => String::from("While"),
-                StmtNode::Loop(_, _) => String::from("Loop"),
-                StmtNode::Return(_, _) => String::from("Return"),
-                StmtNode::Print(_, _) => String::from("Print"),
+                StmtNode::Block(_, _, _) => String::from("Block"),
+                StmtNode::Conditional(_, _, _) => String::from("Conditional"),
+                StmtNode::Keyword(_, _, _) => String::from("Keyword"),
+                StmtNode::Declaration(_, _, _) => String::from("Declaration"),
+                StmtNode::Expression(_, _, _) => String::from("Expression"),
+                StmtNode::For(_, _, _) => String::from("For"),
+                StmtNode::While(_, _, _) => String::from("While"),
+                StmtNode::Loop(_, _, _) => String::from("Loop"),
+                StmtNode::Return(_, _, _) => String::from("Return"),
+                StmtNode::Print(_, _, _) => String::from("Print"),
             }
         }
 
         pub fn location(&self) -> Location {
             match self {
-                Self::Block(_, l) => *l,
-                Self::Conditional(_, l) => *l,
-                Self::Keyword(_, l) => *l,
-                Self::Declaration(_, l) => *l,
-                Self::Expression(_, l) => *l,
-                Self::For(_, l) => *l,
-                Self::While(_, l) => *l,
-                Self::Loop(_, l) => *l,
-                Self::Return(_, l) => *l,
-                Self::Print(_, l) => *l
+                Self::Block(_, l, _) => *l,
+                Self::Conditional(_, l, _) => *l,
+                Self::Keyword(_, l, _) => *l,
+                Self::Declaration(_, l, _) => *l,
+                Self::Expression(_, l, _) => *l,
+                Self::For(_, l, _) => *l,
+                Self::While(_, l, _) => *l,
+                Self::Loop(_, l, _) => *l,
+                Self::Return(_, l, _) => *l,
+                Self::Print(_, l, _) => *l
+            }
+        }
+
+        pub fn end_location(&self) -> Location {
+            match self {
+                Self::Block(_, _, l) => *l,
+                Self::Conditional(_, _, l) => *l,
+                Self::Keyword(_, _, l) => *l,
+                Self::Declaration(_, _, l) => *l,
+                Self::Expression(_, _, l) => *l,
+                Self::For(_, _, l) => *l,
+                Self::While(_, _, l) => *l,
+                Self::Loop(_, _, l) => *l,
+                Self::Return(_, _, l) => *l,
+                Self::Print(_, _, l) => *l
             }
         }
     }

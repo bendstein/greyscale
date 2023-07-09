@@ -565,13 +565,13 @@ impl<'a> Parser<'a> {
                 self.lexer.advance();
                 
                 //Handle string literal
-                return self.parse_string(primary_token).map(Some);
+                return self.parse_string(primary_token, self.location_at_position(start_position)).map(Some);
             }
             else if let TokenType::Number(_, _, _) = token_type {
                 self.lexer.advance();
 
                 //Handle number literal
-                return self.parse_number(primary_token).map(Some);
+                return self.parse_number(primary_token, self.location_at_position(start_position)).map(Some);
             }
             else if token_type == &TokenType::True {
                 self.lexer.advance();
@@ -620,12 +620,10 @@ impl<'a> Parser<'a> {
         Ok(None)
     }
 
-    fn parse_number(&self, token: Token) -> Result<ExprNode, GreyscaleError> {
+    fn parse_number(&self, token: Token, start_loc: Location) -> Result<ExprNode, GreyscaleError> {
         if constants::TRACE {
             println!("Parser: Number Expression");
         }
-
-        let start_position = self.lexer.current_position();
 
         let token_type = token.token_type();
 
@@ -680,7 +678,7 @@ impl<'a> Parser<'a> {
 
                 return Ok(ExprNode::Literal(Literal {
                     value: LiteralType::Double(n)
-                }, self.location_at_position(start_position)))
+                }, start_loc))
             }
             //Parse as integer
             else {
@@ -696,19 +694,17 @@ impl<'a> Parser<'a> {
 
                 return Ok(ExprNode::Literal(Literal {
                     value: LiteralType::Integer(n)
-                }, self.location_at_position(start_position)))
+                }, start_loc))
             }
         }
 
-        Err(self.make_error("Expected a number.".to_string(), start_position))
+        Err(GreyscaleError::CompileErr("Expected a number.".to_string(), start_loc))
     }
 
-    fn parse_string(&self, token: Token) -> Result<ExprNode, GreyscaleError>  {
+    fn parse_string(&self, token: Token, start_loc: Location) -> Result<ExprNode, GreyscaleError>  {
         if constants::TRACE {
             println!("Parser: String Expression");
         }
-
-        let start_position = self.lexer.current_position();
 
         let token_type = token.token_type().clone();
 
@@ -719,36 +715,48 @@ impl<'a> Parser<'a> {
                     let content = self.program[range].join("");
                     return Ok(ExprNode::Literal(Literal {
                         value: LiteralType::String(content)
-                    }, self.location_at_position(start_position)));
+                    }, start_loc));
                 },
                 StringType::Interpolated => {
                     let mut segments: Vec<ExprNode> = Vec::new();
 
-                    let lexer_current_state = self.lexer.get_inner_state();
+                    //let lexer_current_state = self.lexer.get_inner_state();
 
                     //Create a tokenizer for the interpolated string, positioned at the current token
-                    let interp_lexer = InterpStringLexer::new(self.program.clone())
+                    let mut interp_lexer = InterpStringLexer::new(self.program.clone())
                         .with_state(LexerState {
                             start: range.start,
                             current: range.start,
-                            line: lexer_current_state.line,
-                            column: lexer_current_state.column,
+                            line: start_loc.line,
+                            column: start_loc.column,
                             end: range.end
                         });
 
+                    let mut prev_state = interp_lexer.get_state();
+
                     //Recursively parse subtokens
-                    for interp_token_result in interp_lexer {
+                    while let Some(interp_token_result) = interp_lexer.scan_token() {
+                        let current_state = prev_state;
+                        prev_state = interp_lexer.get_state();
+
                         let interp_token = interp_token_result?;
 
                         if let TokenType::String(interp_range, segment_type) = interp_token.token_type() {
-                            let lexer_current_state = self.lexer.get_inner_state();
+
+                            let line = current_state.line;
+                            let column = if segment_type.is_interpolated_segment() {
+                                current_state.column + 1
+                            }
+                            else {
+                                current_state.column
+                            };
 
                             let token_lexer = Lexer::new(self.program.clone())
                                 .with_state(LexerState {
                                     start: interp_range.start,
                                     current: interp_range.start,
-                                    line: lexer_current_state.line,
-                                    column: lexer_current_state.column,
+                                    line,
+                                    column,
                                     end: interp_range.end
                                 });
 
@@ -763,16 +771,19 @@ impl<'a> Parser<'a> {
                                 //Recursively parse expression
                                 StringType::InterpolatedSegment => {
                                     token_parser.expression()?
-                                        .ok_or_else(|| self.make_error("Expected an expression".to_string(), start_position))
+                                        .ok_or_else(|| GreyscaleError::CompileErr("Expected an expression".to_string(), start_loc))
                                 },
                                 //Handle segment as string
-                                _ => token_parser.parse_string(interp_token)
+                                _ => token_parser.parse_string(interp_token, Location {
+                                    line,
+                                    column
+                                })
                             }?;
 
                             segments.push(expr);
                         }
                         else {
-                            return Err(self.make_error("Unexpected token in interpolated string.".to_string(), start_position));
+                            return Err(GreyscaleError::CompileErr("Unexpected token in interpolated string.".to_string(), start_loc));
                         }
                     }
 
@@ -781,25 +792,25 @@ impl<'a> Parser<'a> {
                     if segments.is_empty() {
                         return Ok(ExprNode::Literal(Literal {
                             value: LiteralType::String("".to_string())
-                        }, self.location_at_position(start_position)));
+                        }, start_loc));
                     }
                     else {
                         return Ok(ExprNode::InterpolatedString(InterpolatedString 
                         { 
                             segments
-                        }, self.location_at_position(start_position)));
+                        }, start_loc));
                     }
                 },
                 StringType::InterpolatedSegment => {
-                    return Err(self.make_error("Unexpected token.".to_string(), start_position));
+                    return Err(GreyscaleError::CompileErr("Unexpected token.".to_string(), start_loc));
                 },
                 StringType::Escaped => {
-                    return Err(self.make_error("Escape sequences are not yet supported".to_string(), start_position));
+                    return Err(GreyscaleError::CompileErr("Escape sequences are not yet supported".to_string(), start_loc));
                 },
             }
         }
         
-        Err(self.make_error("Expected a string.".to_string(), start_position))
+        Err(GreyscaleError::CompileErr("Expected a string.".to_string(), start_loc))
     }
 }
 
@@ -822,7 +833,8 @@ impl<'a> Parser<'a>  {
             //Return expression statement
             return Ok(Some(StmtNode::Expression(Expression {
                 expression: Box::new(expr)
-            }, self.location_at_position(start_position))));
+            }, self.location_at_position(start_position),
+            self.location_at_position(self.lexer.current_position()))));
         }
 
         //Not an expression statement
@@ -857,7 +869,8 @@ impl<'a> Parser<'a>  {
                     //Return print statement
                     return Ok(Some(StmtNode::Print(Print {
                         expression: Box::new(expr)
-                    }, self.location_at_position(start_position))));
+                    }, self.location_at_position(start_position),
+                    self.location_at_position(self.lexer.current_position()))));
                 }
                 else {
                     return Err(self.make_error(String::from("Expected an expression."), expr_position));

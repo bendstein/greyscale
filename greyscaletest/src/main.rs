@@ -11,11 +11,18 @@ use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "6 * 2;
-    3 * 5;
+    let program = "`
+{1} a
 
-    print 16;
-    ";
+{2}
+
+bbaaa
+aa
+`;
+
+
+5 + 6
+;";
 
     if constants::TRACE {
         println!("Program: {program}");

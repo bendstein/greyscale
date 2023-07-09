@@ -38,8 +38,8 @@ fn main() -> Result<(), String> {
             GreyscaleError::CompileErr(ce, loc) => {
                 format!("A compile error occurred: [Ln: {}, Col: {}] {ce}", loc.line, loc.column)
             },
-            GreyscaleError::RuntimeErr(re) => {
-                format!("A runtime error occurred: {re}")
+            GreyscaleError::RuntimeErr(re, loc) => {
+                format!("A runtime error occurred: {re} at: line {}", loc.line)
             },
             GreyscaleError::AggregateErr(inner) => {
                 let mut messages: Vec<String> = Vec::new();

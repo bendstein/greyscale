@@ -96,34 +96,34 @@ impl<'a> Compiler<'a> {
 
     fn stmt(&mut self, stmt: StmtNode) {
         match stmt {
-            StmtNode::Block(_, loc) => {
+            StmtNode::Block(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Block statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Conditional(_, loc) => {
+            StmtNode::Conditional(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Conditional statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Keyword(_, loc) => {
+            StmtNode::Keyword(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Declaration(_, loc) => {
+            StmtNode::Declaration(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Declaration statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Expression(expression, _) => {
-                self.stmt_expression(expression);
+            StmtNode::Expression(expression, _, end_loc) => {
+                self.stmt_expression(expression, end_loc);
             },
-            StmtNode::Print(print, _) => {
-                self.stmt_print(print);
+            StmtNode::Print(print, _, end_loc) => {
+                self.stmt_print(print, end_loc);
             },
-            StmtNode::For(_, loc) => {
+            StmtNode::For(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::While(_, loc) => {
+            StmtNode::While(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("While statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Loop(_, loc) => {
+            StmtNode::Loop(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Loop statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Return(_, loc) => {
+            StmtNode::Return(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Return statement compilation not yet implemented.".to_string(), loc));
             },
         }
@@ -251,6 +251,8 @@ impl<'a> Compiler<'a> {
 
             //Concatenate segments
             for segment in interp.segments {
+                let segment_location = segment.location();
+
                 self.expr(segment);
 
                 //Don't push concat operation after first
@@ -258,7 +260,7 @@ impl<'a> Compiler<'a> {
                     first = false;
                 }
                 else {
-                    self.chunk.write(ops::OP_CONCAT, location.line);
+                    self.chunk.write(ops::OP_CONCAT, segment_location.line);
                 }
             }
         }
@@ -267,23 +269,21 @@ impl<'a> Compiler<'a> {
 
 //Statements
 impl<'a> Compiler<'a> {
-    fn stmt_expression(&mut self, stmt: stmt::Expression) {
-        let location = stmt.expression.location();
-
+    fn stmt_expression(&mut self, stmt: stmt::Expression, end_loc: Location) {
         //Compile expression
         self.expr(*stmt.expression);
 
         //Push pop
-        self.chunk.write(ops::OP_POP, location.line);
+        self.chunk.write(ops::OP_POP, end_loc.line);
     }
 
-    fn stmt_print(&mut self, stmt: stmt::Print) {
+    fn stmt_print(&mut self, stmt: stmt::Print, end_loc: Location) {
         let location = stmt.expression.location();
 
         //Compile expression
         self.expr(*stmt.expression);
 
         //Push print
-        self.chunk.write(ops::OP_PRINT, location.line);
+        self.chunk.write(ops::OP_PRINT, end_loc.line);
     }
 }

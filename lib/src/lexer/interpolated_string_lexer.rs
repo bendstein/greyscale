@@ -171,6 +171,11 @@ impl<'a> InterpStringLexer<'a> {
             }
             //Otherwise, accept symbol as part of string literal
             else {
+                //On newline, increment line and advabce
+                if matches!(next, "\n" | "\r\n") {
+                    self.advance_line();
+                }
+                
                 let _ = self.advance();
             }
         }

@@ -164,6 +164,20 @@ pub enum Base {
     Hexadecimal
 }
 
+impl Base {
+    pub fn is_decimal(&self) -> bool {
+        matches!(self, Self::Decimal)
+    }
+
+    pub fn is_binary(&self) -> bool {
+        matches!(self, Self::Binary)
+    }
+
+    pub fn is_hexadecimal(&self) -> bool {
+        matches!(self, Self::Hexadecimal)
+    }
+}
+
 #[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum StringType {
     #[default]
@@ -171,4 +185,22 @@ pub enum StringType {
     Interpolated,
     InterpolatedSegment,
     Escaped
+}
+
+impl StringType {
+    pub fn is_literal(&self) -> bool {
+        matches!(self, Self::Literal)
+    }
+
+    pub fn is_interpolated(&self) -> bool {
+        matches!(self, Self::Interpolated)
+    }
+
+    pub fn is_interpolated_segment(&self) -> bool {
+        matches!(self, Self::InterpolatedSegment)
+    }
+
+    pub fn is_escaped(&self) -> bool {
+        matches!(self, Self::Escaped)
+    }
 }
