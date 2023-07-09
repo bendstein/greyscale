@@ -112,6 +112,7 @@ impl Value {
         if let Self::Object(obj) = self {
             let ptr: &Object = Rc::borrow(obj);
 
+            #[allow(irrefutable_let_patterns)]
             if let Object::String(s) = ptr {
                 return s.clone();
             }

@@ -2,9 +2,13 @@ use std::{collections::HashMap, fmt::Display};
 
 #[derive(Default, Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
 pub enum Op {
-    //Constant declarations ----------
+    //Declarations And Variables ---
     Constant,
     ConstantLong,
+    DefineGlobal,
+    DefineGlobalLong,
+    GetGlobal,
+    GetGlobalLong,
 
 
     //Keywords -----------------------
@@ -93,10 +97,13 @@ impl From<Op> for u8 {
     }
 }
 
-//Constant declarations --------------
+//Declarations And Variables -------
 pub const OP_CONSTANT: u8       = 0;
 pub const OP_CONSTANT_LONG: u8  = 1;
-
+pub const OP_DEF_GLOBAL: u8     = 2;
+pub const OP_DEF_GLOBAL_LONG: u8= 3;
+pub const OP_GET_GLOBAL: u8     = 4;
+pub const OP_GET_GLOBAL_LONG: u8= 5;
 
 //Keywords ---------------------------
 pub const OP_RETURN: u8         = 10;
@@ -144,9 +151,13 @@ pub const OP_CONCAT: u8         = 76;
 
 lazy_static! {
     static ref OPS_PAIRS: Vec<(u8, Op)> = vec![
-        //Constant declarations ----------------
+        //Declarations And Variables ---------
         (OP_CONSTANT, Op::Constant),
         (OP_CONSTANT_LONG, Op::ConstantLong),
+        (OP_DEF_GLOBAL, Op::DefineGlobal),
+        (OP_DEF_GLOBAL_LONG, Op::DefineGlobalLong),
+        (OP_GET_GLOBAL, Op::GetGlobal),
+        (OP_GET_GLOBAL_LONG, Op::GetGlobalLong),
 
 
         //Keywords -----------------------------
@@ -193,10 +204,13 @@ lazy_static! {
     ];  
     
     static ref OP_NAMES: HashMap<Op, &'static str> = [
-        //Constant declarations ----------------
+        //Declarations And Variables ---------
         (Op::Constant, "OP_CONSTANT"),
         (Op::ConstantLong, "OP_CONSTANT_LONG"),
-
+        (Op::DefineGlobal, "OP_DEFINE_GLOBAL"),
+        (Op::DefineGlobalLong, "OP_DEFINE_GLOBAL_LONG"),
+        (Op::GetGlobal, "OP_GET_GLOBAL"),
+        (Op::GetGlobalLong, "OP_GET_GLOBAL_LONG"),
 
         //Keywords -----------------------------
         (Op::Return, "OP_RETURN"),

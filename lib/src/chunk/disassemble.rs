@@ -51,10 +51,13 @@ impl Chunk {
         let op = Op::from(instr);
 
         match op {
-            //Constant declarations -------------------------------------------
-            Op::Constant => self.disassemble_instr_const(offset, f),
-            Op::ConstantLong => self.disassemble_instr_const_long(offset, f),
-
+            //Declarations And Variables -------------------------------------------
+            Op::Constant => self.disassemble_instr_const(op, offset, f),
+            Op::ConstantLong => self.disassemble_instr_const_long(op, offset, f),
+            Op::DefineGlobal => self.disassemble_instr_const(op, offset, f),
+            Op::DefineGlobalLong => self.disassemble_instr_const_long(op, offset, f),
+            Op::GetGlobal => self.disassemble_instr_const(op, offset, f),
+            Op::GetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
 
             //Keywords --------------------------------------------------------
             Op::Return => self.disassemble_instr_simple(op, offset, f),
@@ -108,21 +111,21 @@ impl Chunk {
         Ok(offset + 1)
     }
     
-    fn disassemble_instr_const(&self, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{}  {:04X?}  ", Op::Constant.name_padded(), self[offset + 1]))?;
+    fn disassemble_instr_const(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+        f.write_fmt(format_args!("{}  {:04X?}  ", op.name_padded(), self[offset + 1]))?;
         self.write_value(self[offset + 1] as usize, f)?;
         f.write_char('\n')?;
         Ok(offset + 2)
     }
 
-    fn disassemble_instr_const_long(&self, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn disassemble_instr_const_long(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
         //Combine the next 2 arguments to get the full index
         let a1 = self[offset + 1];
         let a2 = self[offset + 2];
 
         let combined = ((a1 as u16) << 8) + (a2 as u16);
 
-        f.write_fmt(format_args!("{}  {:04X?}  ", Op::ConstantLong.name_padded(), combined))?;
+        f.write_fmt(format_args!("{}  {:04X?}  ", op.name_padded(), combined))?;
 
         self.write_value(combined as usize, f)?;
         f.write_char('\n')?;

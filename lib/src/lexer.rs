@@ -936,7 +936,6 @@ impl<'a> LexerIterWithHistory<'a> {
         let current_state = self.lexer.get_state();
 
         let scanned = self.lexer.scan_token();
-        let new_state = self.lexer.get_state();
 
         let line = current_state.line;
         let column = current_state.column;

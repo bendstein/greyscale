@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -163,6 +163,11 @@ impl<'a> Parser<'a> {
         //Try match print statement
         if let Some(print_stmt) = self.print_statement()? {
             return Ok(Some(print_stmt));
+        }
+
+        //Try match declaration statement
+        if let Some(decl_stmt) = self.declaration_statement()? {
+            return Ok(Some(decl_stmt));
         }
 
         //Try match expression statement
@@ -861,9 +866,7 @@ impl<'a> Parser<'a>  {
                 let expr_position = self.lexer.current_position();
 
                 //Match an expression
-                let maybe_expr = self.expression()?;
-
-                if let Some(expr) = maybe_expr {
+                if let Some(expr) = self.expression()? {
                     //Match semicolon, allowing implicit if enabled
                     self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
 
@@ -880,6 +883,78 @@ impl<'a> Parser<'a>  {
         }
 
         //Not an expression statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn declaration_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Declaration Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match keyword let
+        if let Some(token) = self.lexer.current_token() {
+            let let_token = token?;
+            let let_token_type = let_token.token_type();
+
+            if let_token_type == &TokenType::Let {
+                //Advance lexer
+                self.lexer.advance();
+
+                let id_position = self.lexer.current_position();
+
+                //Match identifier
+                if let Some(token) = self.lexer.current_token() {
+                    let id_token = token?;
+                    let id_token_type = id_token.token_type();
+
+                    if let TokenType::Identifier(_) = id_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+
+                        //If next token is =, match assignment as well
+                        let mut assignment: Option<ExprNode> = None;
+
+                        if let Some(token) = self.lexer.current_token() {
+                            let assign_token = token?;
+                            let assign_token_type = assign_token.token_type();
+
+                            if let TokenType::Equal = assign_token_type {
+                                //Advance lexer
+                                self.lexer.advance();
+
+                                let expr_position = self.lexer.current_position();
+
+                                //Match an expression
+                                if let Some(expr) = self.expression()? {
+                                    assignment = Some(expr);
+                                }
+                                else {
+                                    return Err(self.make_error(format!("Expected an expression after assignment operator '{}'.", assign_token_type.as_string()), expr_position));
+                                }
+                            }
+                        }
+
+                        //Match semicolon, allowing implicit if enabled
+                        self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+
+                        //Return declaration statement
+                        return Ok(Some(StmtNode::Declaration(Declaration {
+                            id: id_token,
+                            assignment: assignment.map(Box::from)
+                        }, self.location_at_position(start_position),
+                        self.location_at_position(self.lexer.current_position()))));
+                    }
+                    else {
+                        return Err(self.make_error(format!("Expected an identifier after keyword '{}'.", let_token_type.as_string()), id_position));
+                    }
+                }
+            }
+        }
+
+        //Not a declaration statement
         self.lexer.set_position(start_position);
         Ok(None)
     }

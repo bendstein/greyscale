@@ -19,6 +19,7 @@ use chunk::Chunk;
 use value::Value;
 use crate::location::Location;
 
+#[allow(dead_code)]
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
@@ -82,8 +83,8 @@ impl<'a> Compiler<'a> {
             ExprNode::InterpolatedString(interp, loc) => {
                 self.expr_interpolated_string(interp, loc);
             },
-            ExprNode::Identifier(_, loc) => {
-                self.errors.push(GreyscaleError::CompileErr("Identifier expression compilation not yet implemented.".to_string(), loc));
+            ExprNode::Identifier(id, loc) => {
+                self.expr_id(id, loc);
             },
             ExprNode::Function(_, loc) => {
                 self.errors.push(GreyscaleError::CompileErr("Function expression compilation not yet implemented.".to_string(), loc));
@@ -105,14 +106,14 @@ impl<'a> Compiler<'a> {
             StmtNode::Keyword(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string(), loc));
             },
-            StmtNode::Declaration(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Declaration statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Declaration(declaration, loc, _) => {
+                self.stmt_declaration(declaration, loc);
             },
             StmtNode::Expression(expression, _, end_loc) => {
                 self.stmt_expression(expression, end_loc);
             },
-            StmtNode::Print(print, _, end_loc) => {
-                self.stmt_print(print, end_loc);
+            StmtNode::Print(print, loc, _) => {
+                self.stmt_print(print, loc);
             },
             StmtNode::For(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string(), loc));
@@ -129,21 +130,24 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn push_const(&mut self, value: Value, location: Location) {
+    fn push_const(&mut self, code: u8, code_long: u8, value: Value, location: Location) -> usize {
         let const_count = self.chunk.count_consts();
 
         if const_count < u8::MAX as usize {
             let index = self.chunk.add_const(value) as u8;
-            self.chunk.write(ops::OP_CONSTANT, location.line);
+            self.chunk.write(code, location.line);
             self.chunk.write(index, location.line);
+            index as usize
         }
         else if const_count < u16::MAX as usize {
             let index = self.chunk.add_const(value) as u16;
-            self.chunk.write(ops::OP_CONSTANT_LONG, location.line);
+            self.chunk.write(code_long, location.line);
             self.chunk.write_u16(index, location.line);
+            index as usize
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX), location));
+            u16::MAX as usize
         }
     }
 
@@ -156,27 +160,27 @@ impl<'a> Compiler<'a> {
         match lit.value {
             ast::LiteralType::Void => {
                 let value = Value::Void;
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
             ast::LiteralType::Null => {
                 let value = Value::Null;
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
             ast::LiteralType::Boolean(b) => {
                 let value = Value::Bool(b);
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
             ast::LiteralType::String(s) => {
                 let value = Value::Object(Rc::new(Object::String(s)));
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
             ast::LiteralType::Double(n) => {
                 let value = Value::Double(n);
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
             ast::LiteralType::Integer(n) => {
                 let value = Value::Int(n);
-                self.push_const(value, location);
+                self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
         }
     }
@@ -265,6 +269,24 @@ impl<'a> Compiler<'a> {
             }
         }
     }
+
+    fn expr_id(&mut self, expr: expr::Identifier, location: Location) {
+        //Get identifier
+        let id_token = expr.id;
+        let id_token_type = id_token.token_type();
+
+        if let TokenType::Identifier(range) = id_token_type {
+            let content = (&self.program)[range.clone()].join("");
+
+            //Add id to constants table and get its index
+            let id_value = Value::Object(Rc::new(Object::String(content)));
+            self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, id_value, location);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
+                id_token_type.as_string()), location));
+        }
+    }
 }
 
 //Statements
@@ -277,11 +299,39 @@ impl<'a> Compiler<'a> {
         self.chunk.write(ops::OP_POP, end_loc.line);
     }
 
-    fn stmt_print(&mut self, stmt: stmt::Print, end_loc: Location) {
+    fn stmt_print(&mut self, stmt: stmt::Print, loc: Location) {
         //Compile expression
         self.expr(*stmt.expression);
 
         //Push print
-        self.chunk.write(ops::OP_PRINT, end_loc.line);
+        self.chunk.write(ops::OP_PRINT, loc.line);
+    }
+
+    fn stmt_declaration(&mut self, stmt: stmt::Declaration, loc: Location) {
+        //If there is an assignment, push it
+        if let Some(assignment) = stmt.assignment {
+            //Compile expression
+            self.expr(*assignment);
+        }
+        //Otherwise, push null
+        else {
+            self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Null, loc);
+        }
+
+        //Get identifier
+        let id_token = stmt.id;
+        let id_token_type = id_token.token_type();
+
+        if let TokenType::Identifier(range) = id_token_type {
+            let content = (&self.program)[range.clone()].join("");
+
+            //Add id to constants table and get its index
+            let id_value = Value::Object(Rc::new(Object::String(content)));
+            self.push_const(ops::OP_DEF_GLOBAL, ops::OP_DEF_GLOBAL_LONG, id_value, loc);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
+                id_token_type.as_string()), loc));
+        }
     }
 }

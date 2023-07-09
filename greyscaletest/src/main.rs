@@ -12,8 +12,10 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program = "
-5 += 2;
-3 + 5;
+        let x = 15;
+        let y = 17;
+        let z = x * y;
+        print `The quick brown fox jumped over the lazy dog {z - 4} times.`;
     ";
 
     if constants::TRACE {
@@ -64,6 +66,9 @@ fn main() {
     }
 
     if constants::TRACE {
+        print!("STACK: ");
+        vm.stack_trace();
+        println!();
         println!("OK");
     }
 

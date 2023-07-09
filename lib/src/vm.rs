@@ -1,4 +1,4 @@
-use std::{rc::Rc};
+use std::{rc::Rc, collections::HashMap};
 
 use crate::{chunk::{Chunk, disassemble::FormattableInstr}, ops::Op, value::{Value, object::Object}, constants, location::Location};
 
@@ -14,6 +14,7 @@ pub struct VirtualMachine {
     chunk: Chunk,
     ip: usize,
     stack: Vec<Value>,
+    globals: HashMap<String, Value>,
     settings: VMSettings
 }
 
@@ -27,6 +28,7 @@ impl VirtualMachine {
             chunk,
             ip: 0,
             stack: Vec::new(),
+            globals: HashMap::new(),
             settings
         }
     }
@@ -50,14 +52,13 @@ impl VirtualMachine {
             self.trace();
 
             match instr {
-                //Constant declarations ------------------------------------------------------------
+                //Declarations And Variables ------------------------------------------------------------
                 Op::Constant => {
                     if let Some(addr) = self.move_next() {
                         let value = self.read_const(addr as usize)?.clone();
                         self.push_value(value)?;
                     }
-                    else {
-                        
+                    else {           
                         return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
@@ -67,6 +68,98 @@ impl VirtualMachine {
                             let addr = (addr2 as u16) + ((addr1 as u16) << 8);
                             let value = self.read_const(addr as usize)?.clone();
                             self.push_value(value)?;
+                        }
+                        else {
+                            return Err(self.make_error("Expected the 16-bit address of a constant.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
+                Op::DefineGlobal => {
+                    if let Some(addr) = self.move_next() {
+                        let value = self.read_const(addr as usize)?.clone();
+                        
+                        if !value.is_object_string() {
+                            return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                        }
+
+                        let id = value.unwrap_object_string();
+
+                        let assign = self.pop_value()
+                            .ok_or_else(|| self.make_error(format!("Expected a value to assign to {id}.")))?;
+
+                        self.globals.insert(id, assign);
+                    }
+                    else {           
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
+                Op::DefineGlobalLong => {
+                    if let Some(addr1) = self.move_next() {
+                        if let Some(addr2) = self.move_next() {
+                            let addr = (addr2 as u16) + ((addr1 as u16) << 8);
+                            let value = self.read_const(addr as usize)?.clone();
+                            
+                            if !value.is_object_string() {
+                                return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                            }
+
+                            let id = value.unwrap_object_string();
+
+                            let assign = self.pop_value()
+                                .ok_or_else(|| self.make_error(format!("Expected a value to assign to {id}.")))?;
+    
+                            self.globals.insert(id, assign);
+                        }
+                        else {
+                            return Err(self.make_error("Expected the 16-bit address of a constant.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
+                Op::GetGlobal => {
+                    if let Some(addr) = self.move_next() {
+                        let value = self.read_const(addr as usize)?.clone();
+                        
+                        if !value.is_object_string() {
+                            return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                        }
+
+                        let id = value.unwrap_object_string();
+
+                        if let Some(global) = self.globals.get(&id) {
+                            self.push_value(global.clone())?;
+                        }
+                        else {
+                            return Err(self.make_error(format!("Undefined global {id}.")));
+                        }
+                    }
+                    else {           
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
+                Op::GetGlobalLong => {
+                    if let Some(addr1) = self.move_next() {
+                        if let Some(addr2) = self.move_next() {
+                            let addr = (addr2 as u16) + ((addr1 as u16) << 8);
+                            let value = self.read_const(addr as usize)?.clone();
+                            
+                            if !value.is_object_string() {
+                                return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                            }
+
+                            let id = value.unwrap_object_string();
+
+                            if let Some(global) = self.globals.get(&id) {
+                                self.push_value(global.clone())?;
+                            }
+                            else {
+                                return Err(self.make_error(format!("Undefined global {id}.")));
+                            }
                         }
                         else {
                             return Err(self.make_error("Expected the 16-bit address of a constant.".to_string()));
@@ -680,7 +773,7 @@ impl VirtualMachine {
         }
     }
 
-    fn stack_trace(&self) {
+    pub fn stack_trace(&self) {
         if constants::TRACE && !&self.stack.is_empty() {
             for value in &self.stack {
                 print!("[ {value} ]");

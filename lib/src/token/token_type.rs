@@ -148,9 +148,9 @@ impl TokenType {
 
     pub fn as_program_string(&self, program: &[&str]) -> String {
         match self {
-            Self::Identifier(range) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
-            Self::String(range, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
-            Self::Number(range, _, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join(" ")),
+            Self::Identifier(range) => format!("{}[{}]", self.as_string(), program[range.clone()].join("")),
+            Self::String(range, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join("")),
+            Self::Number(range, _, _) => format!("{}[{}]", self.as_string(), program[range.clone()].join("")),
             _ => self.as_string()
         }
     }
