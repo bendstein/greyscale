@@ -3,6 +3,7 @@ use std::rc::Rc;
 use crate::parser::ast;
 use crate::chunk;
 use crate::token::token_type::TokenType;
+use crate::value::Values;
 use crate::value::object::Object;
 use crate::vm::error;
 use crate::ops;
@@ -23,7 +24,8 @@ use crate::location::Location;
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
-    chunk: Chunk
+    chunk: Chunk,
+    constants: Values
 }
 
 impl<'a> Compiler<'a> {
@@ -31,7 +33,8 @@ impl<'a> Compiler<'a> {
         let mut compiler = Self {
             program: Rc::clone(&program),
             errors: Vec::new(),
-            chunk: Chunk::default()
+            chunk: Chunk::default(),
+            constants: Values::default()
         };
 
         for statement in ast.statements {
@@ -53,7 +56,8 @@ impl<'a> Compiler<'a> {
         let mut compiler = Self {
             program: Rc::clone(&program),
             errors: Vec::new(),
-            chunk: Chunk::default()
+            chunk: Chunk::default(),
+            constants: Values::default()
         };
 
         compiler.expr(expression);
@@ -131,24 +135,33 @@ impl<'a> Compiler<'a> {
     }
 
     fn push_const(&mut self, code: u8, code_long: u8, value: Value, location: Location) -> usize {
-        let const_count = self.chunk.count_consts();
-
-        if const_count < u8::MAX as usize {
-            let index = self.chunk.add_const(value) as u8;
-            self.chunk.write(code, location.line);
-            self.chunk.write(index, location.line);
-            index as usize
+        //If constant exists, get its index
+        let index = if let Some(i) = self.constants.index_of(&value) {
+            i
         }
-        else if const_count < u16::MAX as usize {
-            let index = self.chunk.add_const(value) as u16;
+        //Otherwise, if there is space for a new constant, add it to the chunk, and the compiler's collection of constants
+        else if self.chunk.count_consts() < u16::MAX as usize  {
+            self.constants.write(value.clone());
+            self.chunk.add_const(value)
+        }
+        //Otherwise, out of range
+        else {
+            u16::MAX as usize
+        };
+
+        if index < u8::MAX as usize {
+            self.chunk.write(code, location.line);
+            self.chunk.write(index as u8, location.line);
+        }
+        else if index < u16::MAX as usize {
             self.chunk.write(code_long, location.line);
-            self.chunk.write_u16(index, location.line);
-            index as usize
+            self.chunk.write_u16(index as u16, location.line);
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX), location));
-            u16::MAX as usize
         }
+
+        index
     }
 
 }

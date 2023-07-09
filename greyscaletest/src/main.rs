@@ -12,11 +12,12 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program = "
-    a * b = c + d;
-    print 6 + 3;
-    print;
-    print 6 + 7
-    print 8 + 2;
+        let x = 5;
+        let y = 5.0;
+        let z = 5.00;
+        let a = 5.0000000000001;
+        let a = 5.00000000000010000;
+        print `{x}{y}{z}{a}`;
     ";
 
     if constants::TRACE {

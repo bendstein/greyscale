@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, self}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -304,7 +304,7 @@ impl<'a> Parser<'a> {
                         }
                     }
             }
-            
+
             //Not an assignment expression. Return lhs.
             return Ok(Some(lhs));
         }

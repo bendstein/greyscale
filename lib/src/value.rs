@@ -4,7 +4,7 @@ use self::object::Object;
 
 pub mod object;
 
-#[derive(Default, Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     #[default]
     Null,
@@ -147,6 +147,13 @@ impl Values {
         else {
             Some(self.at(index))
         }
+    }
+
+    pub fn index_of(&self, value: &Value) -> Option<usize> {
+        self.values.iter()
+            .enumerate()
+            .find(|(_, el)| &value == el)
+            .map(|(ndx, _)| ndx)
     }
 }
 
