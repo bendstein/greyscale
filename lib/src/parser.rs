@@ -234,9 +234,10 @@ impl<'a> Parser<'a> {
                 //Match assignment
                 if let Some(token) = self.lexer.current_token() {
                     let assignment_token = token?;
+                    let token_type = assignment_token.token_type();
 
                     //If token is the assignment operator =, or any of the combined assignment operators (i.e. +=)
-                    if matches!(assignment_token.token_type(), TokenType::Equal | TokenType::PlusEqual | TokenType::MinusEqual |
+                    if matches!(token_type, TokenType::Equal | TokenType::PlusEqual | TokenType::MinusEqual |
                         TokenType::StarEqual | TokenType::SlashEqual | TokenType::PercentEqual | TokenType::CaretEqual |
                         TokenType::CaretCaretEqual | TokenType::AmpEqual | TokenType::AmpAmpEqual | TokenType::PipeEqual |
                         TokenType::PipePipeEqual | TokenType::LessLessEqual | TokenType::GreaterGreaterEqual) {
@@ -246,7 +247,7 @@ impl<'a> Parser<'a> {
 
                             //Parse RHS
                             let rhs = self.expression()?
-                                .ok_or_else(|| self.make_error("Expected an expression.".to_string(), rhs_position))?;
+                                .ok_or_else(|| self.make_error(format!("Expected an expression on right-hand side of binary operator '{}'.", token_type.as_string()), rhs_position))?;
 
                             return Ok(Some(ExprNode::Assignment(Assignment { 
                                 id: id_token, 
@@ -304,16 +305,17 @@ impl<'a> Parser<'a> {
                 //Match operator
                 if let Some(token) = self.lexer.current_token() {
                     let op_token = token?;
+                    let token_type = op_token.token_type();
 
                     //If operator is of this priority
-                    if allowed_tokens.contains(op_token.token_type()) {
+                    if allowed_tokens.contains(token_type) {
                         self.lexer.advance();
 
                         let segment_position = self.lexer.current_position();
 
                         //Match next segment
                         let next = call_next(self, priority)?
-                            .ok_or_else(|| self.make_error("Expected an expression.".to_string(), segment_position))?;
+                            .ok_or_else(|| self.make_error(format!("Expected an expression on right-hand side of binary operator '{}'.", token_type.as_string()), segment_position))?;
     
                         //Push operator and expression to stack
                         adjoining.push(BinaryRHS { 
@@ -378,9 +380,11 @@ impl<'a> Parser<'a> {
         }
 
         if !prefixes.is_empty() {
+            let last_prefix_token_type = prefixes.last().unwrap().token_type();
+
             //There is at least one unary prefix; match rhs
             let next = self.call()?
-                .ok_or_else(|| self.make_error("Expected an expression.".to_string(), start_position))?;
+                .ok_or_else(|| self.make_error(format!("Expected an expression on right-hand side of unary operator '{}'.", last_prefix_token_type.as_string()), start_position))?;
 
             return Ok(Some(ExprNode::Unary(Unary {
                 ops: prefixes,
@@ -430,26 +434,27 @@ impl<'a> Parser<'a> {
 
                                 if let Some(token) = self.lexer.current_token() {
                                     let next_token = token?;
+                                    let token_type = next_token.token_type();
 
                                     //If next symbol is a comma, require that the follwoing symbol isn't a right paren
-                                    if next_token.token_type() == &TokenType::Comma {
+                                    if token_type == &TokenType::Comma {
                                         if let Some(token) = self.lexer.peek_n(1) {
                                             let rparen_token = token?;
 
                                             if rparen_token.token_type() == &TokenType::RParen {
-                                                return Err(self.make_error("Unexpected trailing comma.".to_string(), args_start));
+                                                return Err(self.make_error("Unexpected trailing comma at end of call.".to_string(), args_start));
                                             }
                                         }
 
                                         //Continue to match arguments
                                         self.lexer.advance();
                                     }
-                                    else if next_token.token_type() == &TokenType::RParen {
+                                    else if token_type == &TokenType::RParen {
                                         //Done match arguments
                                         break;
                                     }
                                     else {
-                                        return Err(self.make_error("Unexpected token.".to_string(), args_start));
+                                        return Err(self.make_error(format!("Unexpected token '{}' in call.", token_type.as_program_string(&self.program)), args_start));
                                     }
                                 }
                             }
@@ -471,7 +476,7 @@ impl<'a> Parser<'a> {
                             }
                         }
 
-                        return Err(self.make_error("Unterminated call.".to_string(), loop_start));
+                        return Err(self.make_error("Unterminated call operator.".to_string(), loop_start));
                     }
                 }
 
@@ -605,7 +610,7 @@ impl<'a> Parser<'a> {
                     }
                 }
                 else {
-                    return Err(self.make_error("Expected an expression.".to_string(), start_position));
+                    return Err(self.make_error("Expected an expression after left paren.".to_string(), start_position));
                 }
             }
         }
@@ -848,7 +853,8 @@ impl<'a> Parser<'a>  {
         if let Some(token) = self.lexer.current_token() {
             let printtoken = token?;
 
-            if printtoken.token_type() == &TokenType::Print {
+            let token_type = printtoken.token_type();
+            if token_type == &TokenType::Print {
                 //Advance lexer
                 self.lexer.advance();
 
@@ -868,7 +874,7 @@ impl<'a> Parser<'a>  {
                     self.location_at_position(self.lexer.current_position()))));
                 }
                 else {
-                    return Err(self.make_error(String::from("Expected an expression."), expr_position));
+                    return Err(self.make_error(format!("Expected an expression after keyword '{}'.", token_type.as_string()), expr_position));
                 }
             }
         }

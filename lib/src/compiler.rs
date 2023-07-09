@@ -132,12 +132,12 @@ impl<'a> Compiler<'a> {
     fn push_const(&mut self, value: Value, location: Location) {
         let const_count = self.chunk.count_consts();
 
-        if const_count <= u8::MAX as usize {
+        if const_count < u8::MAX as usize {
             let index = self.chunk.add_const(value) as u8;
             self.chunk.write(ops::OP_CONSTANT, location.line);
             self.chunk.write(index, location.line);
         }
-        else if const_count <= u16::MAX as usize {
+        else if const_count < u16::MAX as usize {
             let index = self.chunk.add_const(value) as u16;
             self.chunk.write(ops::OP_CONSTANT_LONG, location.line);
             self.chunk.write_u16(index, location.line);
@@ -278,8 +278,6 @@ impl<'a> Compiler<'a> {
     }
 
     fn stmt_print(&mut self, stmt: stmt::Print, end_loc: Location) {
-        let location = stmt.expression.location();
-
         //Compile expression
         self.expr(*stmt.expression);
 
