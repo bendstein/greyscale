@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -163,6 +163,11 @@ impl<'a> Parser<'a> {
             println!("Parser: Statement");
         }
 
+        //Try match block statement
+        if let Some(block_stmt) = self.block_statement()? {
+            return Ok(Some(block_stmt));
+        }
+
         //Try match print statement
         if let Some(print_stmt) = self.print_statement()? {
             return Ok(Some(print_stmt));
@@ -220,17 +225,17 @@ impl<'a> Parser<'a> {
     fn sync(&mut self) {
         while !self.is_at_end() {
             //Check for sync token
-            if let Some(Ok(prev_token)) = self.lexer.current_token() {
+            if let Some(Ok(prev_token)) = self.lexer.peek_n(-1) {
                 //Ignore tokenization error, it should already be reported
                 let prev_token_type = prev_token.token_type();
 
                 //If token is a sync token, stop and continue parsing
-                if matches!(prev_token_type, TokenType::Semi) {
+                if matches!(prev_token_type, TokenType::Semi | TokenType::RBrace | TokenType::RBrac | TokenType::RParen) {
                     break;
                 }
             }
 
-            if let Some(next) = self.lexer.peek() {
+            if let Some(next) = self.lexer.current_token() {
                 match next {
                     //If tokenization error, report and continue
                     Err(next_err) => {
@@ -1004,6 +1009,57 @@ impl<'a> Parser<'a>  {
         Ok(None)
     }
 
+    fn block_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if constants::TRACE {
+            println!("Parser: Block Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match token {
+        if let Some(token) = self.lexer.current_token() {
+            let lbrace_token = token?;
+            let lbrace_token_type = lbrace_token.token_type();
+
+            if let TokenType::LBrace = lbrace_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                //Match statements in block
+                let mut statements: Vec<StmtNode> = Vec::new();
+
+                while let Some(token) = self.lexer.current_token() {
+                    let loop_start = self.lexer.current_position();
+                    
+                    let rbrace_token = token?;
+                    let rbrace_token_type = rbrace_token.token_type();
+
+                    if let TokenType::RBrace = rbrace_token_type {
+                        //Advance lexer and return block
+                        self.lexer.advance();
+                        
+                        return Ok(Some(StmtNode::Block(Block {
+                            statements
+                        }, self.location_at_position(start_position),
+                        self.location_at_position(self.lexer.current_position()))));
+                    }
+
+                    //If terminating bracket wasn't found, match statement
+                    let stmt = self.statement()?
+                        .ok_or_else(|| self.make_error("Expected a statement.".to_string(), loop_start))?;
+                    statements.push(stmt);
+                }
+
+                //If this point was reached, the block was missing a terminating }
+                return Err(self.make_error("Unterminated block.".to_string(), start_position));
+            }
+        }
+
+        //Not a block statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
     fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {
         if constants::TRACE {
             println!("Parser: Semicolon");
@@ -1015,11 +1071,8 @@ impl<'a> Parser<'a>  {
         if let Some(token) = self.lexer.current_token() {
             let semitoken = token?;
 
-            if semitoken.token_type() == &TokenType::Semi {
-                
-                if self.lexer.peek().is_none() {
-                    self.lexer.advance();
-                }
+            if let TokenType::Semi = semitoken.token_type() {
+                self.lexer.advance();
 
                 return Ok(());
             }

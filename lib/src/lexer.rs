@@ -775,8 +775,8 @@ impl<'a> LexerIterWithHistory<'a> {
         }
 
         //Move lexer to current position
-        if self.n + 1 < self.history.len() {
-            let current_state = &self.history[self.n + 1];
+        if self.n < self.history.len() {
+            let current_state = &self.history[self.n];
 
             if let Some(state) = current_state {
                 self.lexer.set_state(state.state);

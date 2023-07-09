@@ -52,14 +52,21 @@ impl Chunk {
 
         match op {
             //Declarations And Variables -------------------------------------------
+            //Constants
             Op::Constant => self.disassemble_instr_const(op, offset, f),
             Op::ConstantLong => self.disassemble_instr_const_long(op, offset, f),
+            //Globals
             Op::DefineGlobal => self.disassemble_instr_const(op, offset, f),
             Op::DefineGlobalLong => self.disassemble_instr_const_long(op, offset, f),
             Op::GetGlobal => self.disassemble_instr_const(op, offset, f),
             Op::GetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
             Op::SetGlobal => self.disassemble_instr_const(op, offset, f),
             Op::SetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
+            //Locals
+            Op::GetLocal => self.disassemble_instr_w_arg(op, offset, f),
+            Op::GetLocalLong => self.disassemble_instr_w_arg_long(op, offset, f),
+            Op::SetLocal => self.disassemble_instr_w_arg(op, offset, f),
+            Op::SetLocalLong => self.disassemble_instr_w_arg_long(op, offset, f),
 
 
             //Keywords --------------------------------------------------------
@@ -67,6 +74,8 @@ impl Chunk {
             Op::Print => self.disassemble_instr_simple(op, offset, f),
             //Internal
             Op::Pop => self.disassemble_instr_simple(op, offset, f),
+            Op::PopN => self.disassemble_instr_w_arg(op, offset, f),
+            Op::PopNLong => self.disassemble_instr_w_arg_long(op, offset, f),
 
 
             //Unary operators -------------------------------------------------
@@ -132,6 +141,24 @@ impl Chunk {
         f.write_fmt(format_args!("{}  {:04X?}  ", op.name_padded(), combined))?;
 
         self.write_value(combined as usize, f)?;
+        f.write_char('\n')?;
+        Ok(offset + 3)
+    }
+
+    fn disassemble_instr_w_arg(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), self[offset + 1]))?;
+        f.write_char('\n')?;
+        Ok(offset + 2)
+    }
+
+    fn disassemble_instr_w_arg_long(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+        //Combine the next 2 arguments to get the full index
+        let a1 = self[offset + 1];
+        let a2 = self[offset + 2];
+
+        let combined = ((a1 as u16) << 8) + (a2 as u16);
+
+        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), combined))?;
         f.write_char('\n')?;
         Ok(offset + 3)
     }

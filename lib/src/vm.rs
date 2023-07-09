@@ -53,6 +53,7 @@ impl VirtualMachine {
 
             match instr {
                 //Declarations And Variables ------------------------------------------------------------
+                //Constants
                 Op::Constant => {
                     if let Some(addr) = self.move_next() {
                         let value = self.read_const(addr as usize)?.clone();
@@ -77,6 +78,7 @@ impl VirtualMachine {
                         return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
+                //Globals
                 Op::DefineGlobal => {
                     if let Some(addr) = self.move_next() {
                         let value = self.read_const(addr as usize)?.clone();
@@ -135,7 +137,7 @@ impl VirtualMachine {
                             self.push_value(global.clone())?;
                         }
                         else {
-                            return Err(self.make_error(format!("Undefined global {id}.")));
+                            return Err(self.make_error(format!("Cannot access value of undefined variable {id}.")));
                         }
                     }
                     else {           
@@ -158,7 +160,7 @@ impl VirtualMachine {
                                 self.push_value(global.clone())?;
                             }
                             else {
-                                return Err(self.make_error(format!("Undefined global {id}.")));
+                                return Err(self.make_error(format!("Cannot access value of undefined variable {id}.")));
                             }
                         }
                         else {
@@ -180,7 +182,7 @@ impl VirtualMachine {
                         let id = value.unwrap_object_string();
 
                         if !self.globals.contains_key(&id) {
-                            return Err(self.make_error(format!("Cannot assign value to undefined global {id}.")));
+                            return Err(self.make_error(format!("Cannot assign value to undefined variable {id}.")));
                         }
 
                         //Assignment is an expression that returns the assigned value, so don't pop from stack
@@ -207,7 +209,7 @@ impl VirtualMachine {
                             let id = value.unwrap_object_string();
 
                             if !self.globals.contains_key(&id) {
-                                return Err(self.make_error(format!("Cannot assign value to undefined global {id}.")));
+                                return Err(self.make_error(format!("Cannot assign value to undefined variable {id}.")));
                             }
 
                             //Assignment is an expression that returns the assigned value, so don't pop from stack
@@ -224,6 +226,66 @@ impl VirtualMachine {
                         return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
+                //Locals
+                Op::GetLocal => {
+                    if let Some(n) = self.move_next() {
+                        //Push the value at location n of the stack to the stack
+                        let index = self.stack.len().saturating_sub(n as usize + 1);
+                        let value = &self.stack[index];
+                        self.push_value(value.clone())?;
+                    }
+                    else {
+                        return Err(self.make_error("Expected the index of the local.".to_string()));
+                    }
+                },
+                Op::GetLocalLong => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            
+                            //Push the value at location n of the stack to the stack
+                            let index = self.stack.len().saturating_sub(n as usize + 1);
+                            let value = &self.stack[index];
+                            self.push_value(value.clone())?;
+                        }
+                        else {
+                            return Err(self.make_error("Expected the 16-bit index of the local.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected the index of the local.".to_string()));
+                    }
+                },
+                Op::SetLocal => {
+                    if let Some(n) = self.move_next() {
+                        //Assign the value at the top of the stack to the local at the given index
+                        let index = self.stack.len().saturating_sub(n as usize + 2);
+                        let top = self.peek_value().unwrap();
+                        self.stack[index] = top.clone();
+                    }
+                    else {
+                        return Err(self.make_error("Expected the index of the local.".to_string()));
+                    }
+                },
+                Op::SetLocalLong => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            
+                            //Assign the value at the top of the stack to the local at the given index
+                            let index = self.stack.len().saturating_sub(n as usize + 2);
+                            let top = self.peek_value().unwrap();
+                            self.stack[index] = top.clone();
+                        }
+                        else {
+                            return Err(self.make_error("Expected the 16-bit index of the local.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected the index of the local.".to_string()));
+                    }
+                },
+
 
                 //Keywords  ------------------------------------------------------------------------
                 Op::Return => {
@@ -251,6 +313,28 @@ impl VirtualMachine {
                         let _ = self.pop_value();                        
                     }
                 },
+                Op::PopN => {
+                    if let Some(n) = self.move_next() {
+                        self.pop_n_value(n as usize);
+                    }
+                    else {
+                        return Err(self.make_error("Expected an argument for PopN.".to_string()));
+                    }
+                },
+                Op::PopNLong => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            self.pop_n_value(n as usize);
+                        }
+                        else {
+                            return Err(self.make_error("Expected a 16-bit argument for PopN.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected an argument for PopN.".to_string()));
+                    }
+                }
 
                 //Unary operators  -----------------------------------------------------------------
                 //Arithmetic
@@ -803,6 +887,10 @@ impl VirtualMachine {
 
     fn pop_value(&mut self) -> Option<Value> {
         self.stack.pop()
+    }
+
+    fn pop_n_value(&mut self, n: usize) {
+        self.stack.truncate(self.stack.len().saturating_sub(n))
     }
 
     fn is_at_end(&self) -> bool {

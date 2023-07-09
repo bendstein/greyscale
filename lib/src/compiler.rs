@@ -25,7 +25,8 @@ pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
     chunk: Chunk,
-    constants: Values
+    constants: Values,
+    locals: Vec<Vec<String>>
 }
 
 impl<'a> Compiler<'a> {
@@ -34,7 +35,8 @@ impl<'a> Compiler<'a> {
             program: Rc::clone(&program),
             errors: Vec::new(),
             chunk: Chunk::default(),
-            constants: Values::default()
+            constants: Values::default(),
+            locals: Vec::new()
         };
 
         for statement in ast.statements {
@@ -57,7 +59,8 @@ impl<'a> Compiler<'a> {
             program: Rc::clone(&program),
             errors: Vec::new(),
             chunk: Chunk::default(),
-            constants: Values::default()
+            constants: Values::default(),
+            locals: Vec::new()
         };
 
         compiler.expr(expression);
@@ -101,8 +104,8 @@ impl<'a> Compiler<'a> {
 
     fn stmt(&mut self, stmt: StmtNode) {
         match stmt {
-            StmtNode::Block(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Block statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Block(block, _, end_loc) => {
+                self.stmt_block(block, end_loc);
             },
             StmtNode::Conditional(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Conditional statement compilation not yet implemented.".to_string(), loc));
@@ -164,11 +167,44 @@ impl<'a> Compiler<'a> {
         index
     }
 
+    fn push_local(&mut self, code: u8, code_long: u8, slot: usize, location: Location) {
+        if slot < u8::MAX as usize {
+            self.chunk.write(code, location.line);
+            self.chunk.write(slot as u8, location.line);
+        }
+        else if slot < u16::MAX as usize {
+            self.chunk.write(code_long, location.line);
+            self.chunk.write_u16(slot as u16, location.line);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} locals.", u16::MAX), location));
+        }
+    }
+
+    fn resolve_local(&self, name: &str) -> Option<usize> {
+        let mut position = 0;
+
+        for i in (0..self.locals.len()).rev() {
+            let scope = &self.locals[i];
+
+            for j in (0..scope.len()).rev() {
+                let elem = &scope[j];
+
+                if elem == name {
+                    return Some(position);
+                }
+                else {
+                    position += 1;
+                }
+            }
+        }
+
+        None
+    }
 }
 
 //Expressions
 impl<'a> Compiler<'a> {
-
     fn expr_literal(&mut self, lit: expr::Literal, location: Location) {
         match lit.value {
             ast::LiteralType::Void => {
@@ -291,9 +327,16 @@ impl<'a> Compiler<'a> {
         if let TokenType::Identifier(range) = id_token_type {
             let content = (&self.program)[range.clone()].join("");
 
-            //Add id to constants table
-            let id_value = Value::Object(Rc::new(Object::String(content)));
-            self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, id_value, location);
+            //If id is a local
+            if let Some(index) = self.resolve_local(&content) {
+                self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
+            }
+            //If it's global or undefined
+            else {
+                //Add id to constants table
+                let id_value = Value::Object(Rc::new(Object::String(content)));
+                self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, id_value, location);
+            }
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
@@ -312,10 +355,10 @@ impl<'a> Compiler<'a> {
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
                 id_token_type.as_string()), location));
-
-                //TODO
             return;
         };
+
+        let id_index = self.resolve_local(&id);
 
         let id_rc = Rc::new(Object::String(id));
 
@@ -339,15 +382,23 @@ impl<'a> Compiler<'a> {
             _ => {
                 self.errors.push(GreyscaleError::CompileErr(format!("Invalid assignment operator '{}'.", 
                     assignment_token_type.as_string()), location));
-                    //TODO
-                    return;
+                return;
             }
         };
 
         //If this is a combined assignment, assign {current value} {op} {assigned expression}
         if let Some(infix_op) = maybe_infix_op {
-            //Push identifier
-            self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+
+            //If id is a local
+            if let Some(index) = id_index {
+                //Push local slot
+                self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
+            }
+            //If it's a global or undefined
+            else {
+                //Push identifier
+                self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+            }
 
             //Push assigned expression
             self.expr(*expr.assignment);
@@ -361,13 +412,45 @@ impl<'a> Compiler<'a> {
             self.expr(*expr.assignment);
         }
 
-        //Push assignment operator
-        self.push_const(ops::OP_SET_GLOBAL, ops::OP_SET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+        //If id is a local
+        if let Some(index) = id_index {
+            //Push local slot
+            self.push_local(ops::OP_SET_LOCAL, ops::OP_SET_LOCAL_LONG, index, location);
+        }
+        //If it's a global or undefined
+        else {
+            //Push assignment operator
+            self.push_const(ops::OP_SET_GLOBAL, ops::OP_SET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+        }
     }
 }
 
 //Statements
 impl<'a> Compiler<'a> {
+    fn stmt_block(&mut self, block: stmt::Block, end_loc: Location) {
+        //Push local scope
+        self.locals.push(Vec::new());
+
+        //Compile each statement in block
+        for stmt in block.statements{
+            self.stmt(stmt);
+        }
+
+        //Pop local scope
+        let len = self.locals.last().unwrap().len();
+
+        if len < u8::MAX as usize {
+            self.chunk.write(ops::OP_POP_N, end_loc.line);
+            self.chunk.write(len as u8, end_loc.line);
+        }
+        else {
+            self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+            self.chunk.write_u16(len as u16, end_loc.line);
+        }
+        
+        self.locals.pop();
+    }
+
     fn stmt_expression(&mut self, stmt: stmt::Expression, end_loc: Location) {
         //Compile expression
         self.expr(*stmt.expression);
@@ -402,9 +485,17 @@ impl<'a> Compiler<'a> {
         if let TokenType::Identifier(range) = id_token_type {
             let content = (&self.program)[range.clone()].join("");
 
-            //Add id to constants table and get its index
-            let id_value = Value::Object(Rc::new(Object::String(content)));
-            self.push_const(ops::OP_DEF_GLOBAL, ops::OP_DEF_GLOBAL_LONG, id_value, loc);
+            //If nothing on local scope stack, this is global
+            if self.locals.is_empty() {
+                //Add id to constants table and get its index
+                let id_value = Value::Object(Rc::new(Object::String(content)));
+                self.push_const(ops::OP_DEF_GLOBAL, ops::OP_DEF_GLOBAL_LONG, id_value, loc);
+            }
+            //Otherwise, it is local
+            else {
+                //Value is on top of the stack, push local to current scope in compiler
+                self.locals.last_mut().unwrap().push(content);
+            }
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
