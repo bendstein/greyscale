@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, self}, LiteralType, statement::{Expression, Print, Declaration}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -91,7 +91,10 @@ impl<'a> Parser<'a> {
                     statements.push(node);
                 },
                 Err(err) => {
-                    self.errors.push(err)
+                    self.errors.push(err);
+
+                    //Scan until the next synchronization token is found
+                    self.sync();
                 },
             }
 
@@ -213,6 +216,43 @@ impl<'a> Parser<'a> {
         }
     }
 
+    //An error occurred. Scan until a synchronization token is found before continuing
+    fn sync(&mut self) {
+        while !self.is_at_end() {
+            //Check for sync token
+            if let Some(Ok(prev_token)) = self.lexer.current_token() {
+                //Ignore tokenization error, it should already be reported
+                let prev_token_type = prev_token.token_type();
+
+                //If token is a sync token, stop and continue parsing
+                if matches!(prev_token_type, TokenType::Semi) {
+                    break;
+                }
+            }
+
+            if let Some(next) = self.lexer.peek() {
+                match next {
+                    //If tokenization error, report and continue
+                    Err(next_err) => {
+                        self.errors.push(next_err);
+                    },
+                    Ok(next_token) => {
+                        let next_token_type = next_token.token_type();
+
+                        //If next token is sync token, stop and continue parsing
+                        if matches!(next_token_type, TokenType::Class | TokenType::Func | TokenType::Let | TokenType::For
+                            | TokenType::Loop | TokenType::While | TokenType::If | TokenType::Else | TokenType::Print | TokenType::Return) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            //Advance lexer
+            self.lexer.advance();
+        }
+    }
+
     fn is_at_end(&self) -> bool {
         self.lexer.is_at_end()
     }
@@ -229,44 +269,49 @@ impl<'a> Parser<'a> {
 
         //Match id assignment_op expression 
 
-        //Match identifier
-        if let Some(token) = self.lexer.current_token() {
-            let id_token = token?;
+        //Match higher priority expression
+        if let Some(lhs) = self.binary_op()? {
+            //Match assignment
+            if let Some(token) = self.lexer.current_token() {
+                let assignment_token = token?;
+                let token_type = assignment_token.token_type();
 
-            if let TokenType::Identifier(_) = id_token.token_type() {
-                self.lexer.advance();
+                //If token is the assignment operator =, or any of the combined assignment operators (i.e. +=)
+                if matches!(token_type, TokenType::Equal | TokenType::PlusEqual | TokenType::MinusEqual |
+                    TokenType::StarEqual | TokenType::SlashEqual | TokenType::PercentEqual | TokenType::CaretEqual |
+                    TokenType::CaretCaretEqual | TokenType::AmpEqual | TokenType::AmpAmpEqual | TokenType::PipeEqual |
+                    TokenType::PipePipeEqual | TokenType::LessLessEqual | TokenType::GreaterGreaterEqual) {
+                        //Make sure lhs is a valid target for assignment
+                        if let ExprNode::Identifier(id_expr, _) = lhs {
+                            let id = id_expr.id;
 
-                //Match assignment
-                if let Some(token) = self.lexer.current_token() {
-                    let assignment_token = token?;
-                    let token_type = assignment_token.token_type();
-
-                    //If token is the assignment operator =, or any of the combined assignment operators (i.e. +=)
-                    if matches!(token_type, TokenType::Equal | TokenType::PlusEqual | TokenType::MinusEqual |
-                        TokenType::StarEqual | TokenType::SlashEqual | TokenType::PercentEqual | TokenType::CaretEqual |
-                        TokenType::CaretCaretEqual | TokenType::AmpEqual | TokenType::AmpAmpEqual | TokenType::PipeEqual |
-                        TokenType::PipePipeEqual | TokenType::LessLessEqual | TokenType::GreaterGreaterEqual) {
                             self.lexer.advance();
 
                             let rhs_position = self.lexer.current_position();
 
-                            //Parse RHS
-                            let rhs = self.expression()?
+                            //Match expression of this priority or higher
+                            let rhs = self.assignment_expr()?
                                 .ok_or_else(|| self.make_error(format!("Expected an expression on right-hand side of binary operator '{}'.", token_type.as_string()), rhs_position))?;
-
+    
                             return Ok(Some(ExprNode::Assignment(Assignment { 
-                                id: id_token, 
+                                id, 
                                 assignment_type: assignment_token, 
                                 assignment: Box::new(rhs) 
                             }, self.location_at_position(start_position))))
                         }
-                }
+                        else {
+                            return Err(self.make_error("Left-hand side is not a valid target for assignment.".to_string(), start_position));
+                        }
+                    }
             }
+            
+            //Not an assignment expression. Return lhs.
+            return Ok(Some(lhs));
         }
 
-        //Not an assignment expression; move to next highest priority
+        //Not an expression
         self.lexer.set_position(start_position);
-        self.binary_op()
+        Ok(None)
     }
 
     fn binary_op(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {

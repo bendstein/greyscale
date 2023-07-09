@@ -827,33 +827,37 @@ impl<'a> LexerIterWithHistory<'a> {
             self.history.len() 
         };
 
-        if end > self.n {
-            for i in self.n..=end {
-                self.set_position(i);
+        let range = if end >= self.n {
+            self.n..=end
+        }
+        else {
+            end..=self.n - 1
+        };
 
-                current = Some(self.current()?);
+        for i in range {
+            self.set_position(i);
 
-                if constants::TRACE {
-                    if let Some(item) = current.clone() {
-                        if let Ok(token) = item.token {
-                            println!("(Line: {}, Col: {}) Current Token: {}", 
-                                item.state.line, item.state.column,
-                                token.token_type().as_program_string(&self.lexer.program));
-                        }
-                        else {
-                            println!("(Line: {}, Col: {}) Current Token: Err",
-                                item.state.line, item.state.column);
-                        }
-                    } 
-                    else {
-                        let current_state = self.lexer.get_state();
-                        println!("(Line: {}, Col: {}) Current Token: None",
-                            current_state.line, current_state.column);
+            current = Some(self.current()?);
+
+            if constants::TRACE {
+                if let Some(item) = current.clone() {
+                    if let Ok(token) = item.token {
+                        println!("(Line: {}, Col: {}) Current Token: {}", 
+                            item.state.line, item.state.column,
+                            token.token_type().as_program_string(&self.lexer.program));
                     }
+                    else {
+                        println!("(Line: {}, Col: {}) Current Token: Err",
+                            item.state.line, item.state.column);
+                    }
+                } 
+                else {
+                    let current_state = self.lexer.get_state();
+                    println!("(Line: {}, Col: {}) Current Token: None",
+                        current_state.line, current_state.column);
                 }
             }
         }
-
         current
     }
 

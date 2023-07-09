@@ -14,6 +14,6 @@ pub mod token;
 pub mod location;
 
 pub mod constants {
-    pub const TRACE: bool = true;
+    pub const TRACE: bool = false;
     pub const MAX_STACK: usize = isize::MAX as usize;
 }
