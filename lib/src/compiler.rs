@@ -74,8 +74,8 @@ impl<'a> Compiler<'a> {
             ExprNode::Unary(unary, loc) => {
                 self.expr_unary(unary, loc);
             },
-            ExprNode::Assignment(_, loc) => {
-                self.errors.push(GreyscaleError::CompileErr("Assignment expression compilation not yet implemented.".to_string(), loc));
+            ExprNode::Assignment(assign, loc) => {
+                self.expr_assign(assign, loc);
             },
             ExprNode::Literal(literal, loc) => {
                 self.expr_literal(literal, loc);
@@ -235,7 +235,7 @@ impl<'a> Compiler<'a> {
                 TokenType::Less => self.chunk.write(ops::OP_LESS, location.line),
                 TokenType::LessEqual => self.chunk.write(ops::OP_LESS_EQUAL, location.line),
                 _ => {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
+                    self.errors.push(GreyscaleError::CompileErr(format!("Invalid binary operator '{}'.", 
                         token_type.as_string()), location));
                 }
             }
@@ -278,7 +278,7 @@ impl<'a> Compiler<'a> {
         if let TokenType::Identifier(range) = id_token_type {
             let content = (&self.program)[range.clone()].join("");
 
-            //Add id to constants table and get its index
+            //Add id to constants table
             let id_value = Value::Object(Rc::new(Object::String(content)));
             self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, id_value, location);
         }
@@ -286,6 +286,70 @@ impl<'a> Compiler<'a> {
             self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
                 id_token_type.as_string()), location));
         }
+    }
+
+    fn expr_assign(&mut self, expr: expr::Assignment, location: Location) {
+        //Get identifier
+        let id_token = expr.id;
+        let id_token_type = id_token.token_type();
+
+        let id = if let TokenType::Identifier(range) = id_token_type {
+            (&self.program)[range.clone()].join("")
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
+                id_token_type.as_string()), location));
+
+                //TODO
+            return;
+        };
+
+        let id_rc = Rc::new(Object::String(id));
+
+        let assignment_token_type = expr.assignment_type.token_type();
+
+        let maybe_infix_op = match assignment_token_type {
+            TokenType::Equal => None,
+            TokenType::PlusEqual => Some(ops::OP_ADD),
+            TokenType::MinusEqual => Some(ops::OP_SUBTRACT),
+            TokenType::StarEqual => Some(ops::OP_MULTIPLY),
+            TokenType::SlashEqual => Some(ops::OP_DIVIDE),
+            TokenType::PercentEqual => Some(ops::OP_MODULUS),
+            TokenType::CaretEqual => Some(ops::OP_BITWISE_XOR),
+            TokenType::CaretCaretEqual => Some(ops::OP_LOGICAL_XOR),
+            TokenType::AmpEqual => Some(ops::OP_BITWISE_AND),
+            TokenType::AmpAmpEqual => Some(ops::OP_LOGICAL_AND),
+            TokenType::PipeEqual => Some(ops::OP_BITWISE_OR),
+            TokenType::PipePipeEqual =>Some(ops::OP_LOGICAL_OR),
+            TokenType::LessLessEqual => Some(ops::OP_BITWISE_LSHIFT),
+            TokenType::GreaterGreaterEqual => Some(ops::OP_BITWISE_RSHIFT),
+            _ => {
+                self.errors.push(GreyscaleError::CompileErr(format!("Invalid assignment operator '{}'.", 
+                    assignment_token_type.as_string()), location));
+                    //TODO
+                    return;
+            }
+        };
+
+        //If this is a combined assignment, assign {current value} {op} {assigned expression}
+        if let Some(infix_op) = maybe_infix_op {
+            //Push identifier
+            self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+
+            //Push assigned expression
+            self.expr(*expr.assignment);
+
+            //Push infix op
+            self.chunk.write(infix_op, location.line);
+        }
+        //Otherwise, just push assigned expression
+        else {
+            //Push assigned expression
+            self.expr(*expr.assignment);
+        }
+
+        //Push assignment operator
+        self.push_const(ops::OP_SET_GLOBAL, ops::OP_SET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
     }
 }
 

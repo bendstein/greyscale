@@ -169,7 +169,61 @@ impl VirtualMachine {
                         return Err(self.make_error("Expected the address of a constant.".to_string()));
                     }
                 },
+                Op::SetGlobal => {
+                    if let Some(addr) = self.move_next() {
+                        let value = self.read_const(addr as usize)?.clone();
+                        
+                        if !value.is_object_string() {
+                            return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                        }
 
+                        let id = value.unwrap_object_string();
+
+                        if !self.globals.contains_key(&id) {
+                            return Err(self.make_error(format!("Cannot assign value to undefined global {id}.")));
+                        }
+
+                        //Assignment is an expression that returns the assigned value, so don't pop from stack
+                        let assign = self.peek_value()
+                            .ok_or_else(|| self.make_error(format!("Expected a value to assign to {id}.")))?;
+
+                        self.globals.insert(id, assign.clone());
+
+                    }
+                    else {           
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
+                Op::SetGlobalLong => {
+                    if let Some(addr1) = self.move_next() {
+                        if let Some(addr2) = self.move_next() {
+                            let addr = (addr2 as u16) + ((addr1 as u16) << 8);
+                            let value = self.read_const(addr as usize)?.clone();
+                            
+                            if !value.is_object_string() {
+                                return Err(self.make_error("Expected the name of an identifier.".to_string()));
+                            }
+
+                            let id = value.unwrap_object_string();
+
+                            if !self.globals.contains_key(&id) {
+                                return Err(self.make_error(format!("Cannot assign value to undefined global {id}.")));
+                            }
+
+                            //Assignment is an expression that returns the assigned value, so don't pop from stack
+                            let assign = self.peek_value()
+                                .ok_or_else(|| self.make_error(format!("Expected a value to assign to {id}.")))?;
+    
+                            self.globals.insert(id, assign.clone());
+                        }
+                        else {
+                            return Err(self.make_error("Expected the 16-bit address of a constant.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected the address of a constant.".to_string()));
+                    }
+                },
 
                 //Keywords  ------------------------------------------------------------------------
                 Op::Return => {
@@ -239,6 +293,12 @@ impl VirtualMachine {
                     return Err(self.make_error(format!("Invalid instruction '{n}'.")));
                 },
             };
+
+            if constants::TRACE {
+                print!("STACK --> ");
+                self.stack_trace();
+                println!();
+            }
         }
 
         Ok(())
@@ -406,21 +466,21 @@ impl VirtualMachine {
             Op::Divide => {
                 if let Value::Int(a) = val_a {
                     if let Value::Int(b) = val_b {
-                        self.push_value(Value::Int(a * b))?;
+                        self.push_value(Value::Int(a / b))?;
                         return Ok(());
                     }
                     else if let Value::Double(b) = val_b {
-                        self.push_value(Value::Double((a as f64) * b))?;
+                        self.push_value(Value::Double((a as f64) / b))?;
                         return Ok(());
                     }
                 }
                 else if let Value::Double(a) = val_a {
                     if let Value::Int(b) = val_b {
-                        self.push_value(Value::Double(a * (b as f64)))?;
+                        self.push_value(Value::Double(a / (b as f64)))?;
                         return Ok(());
                     }
                     else if let Value::Double(b) = val_b {
-                        self.push_value(Value::Double(a * b))?;
+                        self.push_value(Value::Double(a / b))?;
                         return Ok(());
                     }
                 }
@@ -769,12 +829,11 @@ impl VirtualMachine {
             print!("\nINSTR: {}", FormattableInstr::new(&self.chunk, self.ip - 1));
             print!("STACK: ");
             self.stack_trace();
-            println!();
         }
     }
 
     pub fn stack_trace(&self) {
-        if constants::TRACE && !&self.stack.is_empty() {
+        if constants::TRACE {
             for value in &self.stack {
                 print!("[ {value} ]");
             }

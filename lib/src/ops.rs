@@ -9,6 +9,8 @@ pub enum Op {
     DefineGlobalLong,
     GetGlobal,
     GetGlobalLong,
+    SetGlobal,
+    SetGlobalLong,
 
 
     //Keywords -----------------------
@@ -104,12 +106,15 @@ pub const OP_DEF_GLOBAL: u8     = 2;
 pub const OP_DEF_GLOBAL_LONG: u8= 3;
 pub const OP_GET_GLOBAL: u8     = 4;
 pub const OP_GET_GLOBAL_LONG: u8= 5;
+pub const OP_SET_GLOBAL: u8     = 6;
+pub const OP_SET_GLOBAL_LONG: u8= 7;
+
 
 //Keywords ---------------------------
-pub const OP_RETURN: u8         = 10;
-pub const OP_PRINT: u8          = 11;
+pub const OP_RETURN: u8         = 20;
+pub const OP_PRINT: u8          = 21;
 //Internal
-pub const OP_POP: u8            = 12;
+pub const OP_POP: u8            = 22;
 
 
 //Unary operators --------------------
@@ -158,6 +163,8 @@ lazy_static! {
         (OP_DEF_GLOBAL_LONG, Op::DefineGlobalLong),
         (OP_GET_GLOBAL, Op::GetGlobal),
         (OP_GET_GLOBAL_LONG, Op::GetGlobalLong),
+        (OP_SET_GLOBAL, Op::SetGlobal),
+        (OP_SET_GLOBAL_LONG, Op::SetGlobalLong),
 
 
         //Keywords -----------------------------
@@ -165,6 +172,7 @@ lazy_static! {
         (OP_PRINT, Op::Print),
         //Internal
         (OP_POP, Op::Pop),
+
 
         //Unary operators ----------------------
         //Arithmetic
@@ -211,6 +219,9 @@ lazy_static! {
         (Op::DefineGlobalLong, "OP_DEFINE_GLOBAL_LONG"),
         (Op::GetGlobal, "OP_GET_GLOBAL"),
         (Op::GetGlobalLong, "OP_GET_GLOBAL_LONG"),
+        (Op::SetGlobal, "OP_SET_GLOBAL"),
+        (Op::SetGlobalLong, "OP_SET_GLOBAL_LONG"),
+
 
         //Keywords -----------------------------
         (Op::Return, "OP_RETURN"),

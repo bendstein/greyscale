@@ -58,12 +58,16 @@ impl Chunk {
             Op::DefineGlobalLong => self.disassemble_instr_const_long(op, offset, f),
             Op::GetGlobal => self.disassemble_instr_const(op, offset, f),
             Op::GetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
+            Op::SetGlobal => self.disassemble_instr_const(op, offset, f),
+            Op::SetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
+
 
             //Keywords --------------------------------------------------------
             Op::Return => self.disassemble_instr_simple(op, offset, f),
             Op::Print => self.disassemble_instr_simple(op, offset, f),
             //Internal
             Op::Pop => self.disassemble_instr_simple(op, offset, f),
+
 
             //Unary operators -------------------------------------------------
             //Arithmetic
