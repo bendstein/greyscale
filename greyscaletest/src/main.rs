@@ -12,22 +12,22 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program = "
+    {
+        let a = 'George';
+        
+        print a;
+
+        a = '5';
+
         {
-            let a = 'George';
-            
             print a;
-
-            a = '5';
-
-            {
-                print a;
-                a += 'c';
-                let a = a;
-                a += 'b'
-            }
-
-            print a;
+            a += 'c';
+            let a = a;
+            a += 'b';
         }
+
+        print a;
+    }
     ";
 
     if constants::TRACE {
@@ -47,6 +47,11 @@ fn main() {
     }
 
     let parsed = parse_result.unwrap();
+
+    if constants::TRACE {
+        let formatted_parsed = parsed.debug_string(Rc::clone(&rc_graphemes));
+        println!("{formatted_parsed}");
+    }
 
     let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
 

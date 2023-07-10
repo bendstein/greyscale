@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::location::Location;
 
 #[derive(Debug)]
@@ -10,6 +12,14 @@ impl AST {
         Self {
             statements
         }
+    }
+
+    pub fn debug_string(&self, program: Rc<Vec<&str>>) -> String {
+        let debug_strings: Vec<String> = self.statements.iter()
+            .map(|node| node.debug_string(4, Rc::clone(&program)))
+            .collect();
+
+        format!("Parse Tree:\n{}", debug_strings.join("\n"))
     }
 }
 
@@ -31,6 +41,13 @@ impl Node {
         match self {
             Node::Expression(expr) => expr.location(),
             Node::Statement(stmt) => stmt.location()
+        }
+    }
+
+    pub fn debug_string(&self, indent: usize, program: Rc<Vec<&str>>) -> String {
+        match self {
+            Node::Expression(expr) => expr.debug_string(indent, program),
+            Node::Statement(stmt) => stmt.debug_string(indent, program)
         }
     }
 }
@@ -56,9 +73,21 @@ impl LiteralType {
             LiteralType::Integer(_) => String::from("Integer"),
         }
     }
+
+    pub fn debug_string(&self, indent: usize) -> String {
+        match self {
+            LiteralType::Void | LiteralType::Null => self.name(),
+            LiteralType::Boolean(v) => format!("{:indent$}|---- {}({})", "", self.name(), v, indent = indent - 4),
+            LiteralType::String(v) => format!("{:indent$}|---- {}({})", "", self.name(), v, indent = indent - 4),
+            LiteralType::Double(v) => format!("{:indent$}|---- {}({})", "", self.name(), v, indent = indent - 4),
+            LiteralType::Integer(v) => format!("{:indent$}|---- {}({})", "", self.name(), v, indent = indent - 4),
+        }
+    }
 }
 
 pub mod expression {
+    use std::rc::Rc;
+
     use crate::location::Location;
     use crate::token::Token;
     use super::LiteralType;
@@ -100,6 +129,77 @@ pub mod expression {
                 Self::Identifier(_, l) => *l,
                 Self::Function(_, l) => *l,
                 Self::Call(_, l) => *l
+            }
+        }
+
+        pub fn debug_string(&self, indent: usize, program: Rc<Vec<&str>>) -> String {
+            match self {
+                ExprNode::Binary(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let lhs = expr.left.debug_string(indent + 6, Rc::clone(&program));
+                    let rhs_strings: Vec<String> = expr.right.iter()
+                        .map(|rhs| {
+                            let op_string = format!("{:indent$}|---- {}", "", rhs.op.token_type().as_program_string(&program), indent = indent + 2);
+                            let expr_string = rhs.right.debug_string(indent + 6, Rc::clone(&program));
+                            format!("{op_string}\n{expr_string}")
+                        })
+                        .collect();
+
+                    format!("{initial}\n{lhs}\n{}", rhs_strings.join("\n"))
+                },
+                ExprNode::Unary(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let op_strings: Vec<String> = expr.ops.iter()
+                        .map(|op| format!("{:indent$}|---- {}", "", op.token_type().as_program_string(&program), indent = indent + 2))
+                        .collect();
+                    let rhs = expr.expr.debug_string(indent + 6, program);
+
+                    format!("{initial}\n{}\n{rhs}", op_strings.join("\n"))
+                },
+                ExprNode::Assignment(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let id = format!("{:indent$}|---- {}", "", expr.id.token_type().as_program_string(&program), indent = indent + 2);
+                    let op = format!("{:indent$}|---- {}", "", expr.assignment_type.token_type().as_program_string(&program), indent = indent + 2);
+                    let expr = expr.assignment.debug_string(indent + 6, program);
+
+                    format!("{initial}\n{id}\n{op}\n{expr}")
+                },
+                ExprNode::Literal(expr, _) => {
+                    expr.value.debug_string(indent)
+                },
+                ExprNode::InterpolatedString(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let segment_strings: Vec<String> = expr.segments.iter()
+                        .map(|segment| segment.debug_string(indent + 6, Rc::clone(&program)))
+                        .collect();
+
+                    format!("{initial}\n{}", segment_strings.join("\n"))
+                },
+                ExprNode::Identifier(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    format!("{initial}\n{:indent$}|---- {}", "", expr.id.token_type().as_program_string(&program), indent = indent + 2)
+                },
+                ExprNode::Function(_expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    initial
+                },
+                ExprNode::Call(expr, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    let callable_str = expr.callable.debug_string(indent + 6, Rc::clone(&program));
+                    let args_strings: Vec<String> = expr.calls.iter()
+                        .map(|args| {
+                            let arg_strings: Vec<String> = args.iter()
+                                .map(|arg| arg.debug_string(indent + 12, Rc::clone(&program)))
+                                .collect();
+
+                            format!("{:indent$}|---- Args:\n{}", "", arg_strings.join("\n"), indent = indent + 2)
+                        })
+                        .collect();
+
+                    format!("{initial}\n{callable_str}\n{}", args_strings.join("\n"))
+                },
             }
         }
     }
@@ -158,6 +258,8 @@ pub mod expression {
 }
 
 pub mod statement {
+    use std::rc::Rc;
+
     use crate::{token::Token, location::Location};
     use super::expression::ExprNode;
 
@@ -218,6 +320,81 @@ pub mod statement {
                 Self::Loop(_, _, l) => *l,
                 Self::Return(_, _, l) => *l,
                 Self::Print(_, _, l) => *l
+            }
+        }
+  
+        pub fn debug_string(&self, indent: usize, program: Rc<Vec<&str>>) -> String {
+            match self {
+                StmtNode::Block(stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    let stmts_strings: Vec<String> = stmt.statements.iter()
+                        .map(|stmt| stmt.debug_string(indent + 6, Rc::clone(&program)))
+                        .collect();
+
+                    format!("{initial}\n{}", stmts_strings.join("\n"))
+                },
+                StmtNode::Conditional(_stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    initial
+                },
+                StmtNode::Keyword(_stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    
+                    initial
+                },
+                StmtNode::Declaration(stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let id = format!("{:indent$}|---- {}", "", stmt.id.token_type().as_program_string(&program), indent = indent + 2);
+
+                    if let Some(assign) = &stmt.assignment {
+                        let assign_string = assign.debug_string(indent + 6, program);
+                        format!("{initial}\n{id}\n{assign_string}")
+                    }
+                    else {
+                        format!("{initial}\n{id}")
+                    }
+                },
+                StmtNode::Expression(stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let expr = stmt.expression.debug_string(indent + 6, program);
+                    
+                    format!("{initial}\n{expr}")
+                },
+                StmtNode::For(_stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    initial
+                },
+                StmtNode::While(_stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    initial
+                },
+                StmtNode::Loop(_stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    initial
+                },
+                StmtNode::Return(stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+
+                    if let Some(expr) = &stmt.expression {
+                        let expr_string = expr.debug_string(indent + 4, program);
+
+                        format!("{initial}\n{expr_string}")
+                    }
+                    else {
+                         initial
+                    }
+                },
+                StmtNode::Print(stmt, _, _) => {
+                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let expr = stmt.expression.debug_string(indent + 6, program);
+                    
+                    format!("{initial}\n{expr}")
+                },
             }
         }
     }
