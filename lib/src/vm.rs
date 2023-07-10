@@ -293,13 +293,13 @@ impl VirtualMachine {
                     return Ok(());
                 },
                 Op::Print => {
-                    if constants::TRACE {
+                    if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
                         println!("\n------VM Output------\n");
                     }
 
                     println!("{}", self.pop_value().unwrap_or_default());
 
-                    if constants::TRACE {
+                    if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
                         println!("\n----End VM Output----\n");
                     }
                 },
@@ -378,7 +378,7 @@ impl VirtualMachine {
                 },
             };
 
-            if constants::TRACE {
+            if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
                 print!("STACK --> ");
                 self.stack_trace();
                 println!();
@@ -913,7 +913,7 @@ impl VirtualMachine {
     // }
 
     fn trace(&self) {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
             print!("\nINSTR: {}", FormattableInstr::new(&self.chunk, self.ip - 1));
             print!("STACK: ");
             self.stack_trace();
@@ -921,7 +921,7 @@ impl VirtualMachine {
     }
 
     pub fn stack_trace(&self) {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
             for value in &self.stack {
                 print!("[ {value} ]");
             }

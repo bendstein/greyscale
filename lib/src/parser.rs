@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_program(&mut self) -> Result<AST, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Program");
         }
 
@@ -99,7 +99,7 @@ impl<'a> Parser<'a> {
             }
 
             //If tracing, output error count, statement count, and tokens
-            if constants::TRACE {
+            if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
                 println!("--------------------------------------------");
                 println!("Current error count: {}.", self.errors.len());
                 println!("Current statement count: {}.", statements.len());
@@ -159,7 +159,7 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Statement");
         }
 
@@ -187,7 +187,7 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: expression");
         }
 
@@ -266,7 +266,7 @@ impl<'a> Parser<'a> {
 //Expression types
 impl<'a> Parser<'a> {
     fn assignment_expr(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Assignment Expression");
         }
 
@@ -320,7 +320,7 @@ impl<'a> Parser<'a> {
     }
 
     fn binary_op(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Binary Infix Expression");
         }
 
@@ -328,7 +328,7 @@ impl<'a> Parser<'a> {
     }
 
     fn binary_op_priority(&mut self, priority: usize) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Binary Infix Expression {priority}");
         }
 
@@ -406,7 +406,7 @@ impl<'a> Parser<'a> {
     }
 
     fn prefix(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Unary Prefix Expression");
         }
 
@@ -453,7 +453,7 @@ impl<'a> Parser<'a> {
     }
 
     fn call(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Call Expression");
         }
 
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
     }
 
     fn func(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Fucntion Expression");
         }
 
@@ -580,7 +580,7 @@ impl<'a> Parser<'a> {
     }
 
     fn func_inline(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Lambda Expression");
         }
 
@@ -589,7 +589,7 @@ impl<'a> Parser<'a> {
     }
 
     fn func_block(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Function Block Expression");
         }
 
@@ -598,7 +598,7 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Primary Expression");
         }
 
@@ -676,7 +676,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_number(&self, token: Token, start_loc: Location) -> Result<ExprNode, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Number Expression");
         }
 
@@ -757,7 +757,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_string(&self, token: Token, start_loc: Location) -> Result<ExprNode, GreyscaleError>  {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: String Expression");
         }
 
@@ -872,7 +872,7 @@ impl<'a> Parser<'a> {
 //Statement types
 impl<'a> Parser<'a>  {
     fn expression_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Expression Statement");
         }
 
@@ -898,7 +898,7 @@ impl<'a> Parser<'a>  {
     }
 
     fn print_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Print Statement");
         }
 
@@ -938,7 +938,7 @@ impl<'a> Parser<'a>  {
     }
 
     fn declaration_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Declaration Statement");
         }
 
@@ -1010,7 +1010,7 @@ impl<'a> Parser<'a>  {
     }
 
     fn block_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Block Statement");
         }
 
@@ -1061,7 +1061,7 @@ impl<'a> Parser<'a>  {
     }
 
     fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Semicolon");
         }
 

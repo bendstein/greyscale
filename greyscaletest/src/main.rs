@@ -1,6 +1,7 @@
 extern crate unicode_segmentation;
 
 use std::rc::Rc;
+use std::time::Instant;
 use greyscale::compiler::Compiler;
 use greyscale::parser::settings::ParserSettings;
 use greyscale::vm::settings::VMSettings;
@@ -13,26 +14,363 @@ use greyscale::vm::error::GreyscaleError;
 fn main() {
     let program = "
     {
-        let a = 'George';
-        
-        print a;
-
-        a = '5';
-
-        {
-            print a;
-            a += 'c';
-            let a = a;
-            a += 'b';
-        }
-
-        print a;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let y = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        let x = 5;
+        x += y *= 6;
+        print `{x} {y}`;
     }
     ";
 
-    if constants::TRACE {
+    if (constants::TRACE & constants::TRACE_OUTPUT_INPUT) == constants::TRACE_OUTPUT_INPUT {
         println!("Program: {program}");
     }
+
+    let compile_start = Instant::now();
 
     let graphemes = program.graphemes(true).collect::<Vec<&str>>();
     let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
@@ -48,7 +386,7 @@ fn main() {
 
     let parsed = parse_result.unwrap();
 
-    if constants::TRACE {
+    if (constants::TRACE & constants::TRACE_OUTPUT_PARSE_TREE) == constants::TRACE_OUTPUT_PARSE_TREE {
         let formatted_parsed = parsed.debug_string(Rc::clone(&rc_graphemes));
         println!("{formatted_parsed}");
     }
@@ -62,10 +400,16 @@ fn main() {
 
     let mut compiled = compile_result.unwrap();
 
-    if constants::TRACE {
+    if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
+        println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
+    }
+
+    if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
         compiled.name = Some(String::from("Trace"));
         println!("{compiled}");
     }
+
+    let exec_start = Instant::now();
 
     let mut vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
         ignore_final_pop: true
@@ -82,7 +426,11 @@ fn main() {
         println!("{r}");
     }
 
-    if constants::TRACE {
+    if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
+        println!("Finished execution in {}ms", exec_start.elapsed().as_millis());
+    }
+
+    if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
         println!("\n--End State--\n");
         print!("STACK: ");
         vm.stack_trace();

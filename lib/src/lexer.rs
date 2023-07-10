@@ -770,7 +770,7 @@ impl<'a> LexerIterWithHistory<'a> {
     }
 
     pub fn clear(&mut self) {
-        if constants::TRACE {
+        if (constants::TRACE & constants::TRACE_LEXER) == constants::TRACE_LEXER {
             println!("Clear lexer history.");
         }
 
@@ -839,7 +839,7 @@ impl<'a> LexerIterWithHistory<'a> {
 
             current = Some(self.current()?);
 
-            if constants::TRACE {
+            if (constants::TRACE & constants::TRACE_LEXER) == constants::TRACE_LEXER {
                 if let Some(item) = current.clone() {
                     if let Ok(token) = item.token {
                         println!("(Line: {}, Col: {}) Current Token: {}", 
@@ -909,7 +909,7 @@ impl<'a> LexerIterWithHistory<'a> {
     }
 
     pub fn set_position(&mut self, n: usize) {
-        if constants::TRACE && self.n != n {
+        if (constants::TRACE & constants::TRACE_LEXER) == constants::TRACE_LEXER && self.n != n {
             println!(" -- Lexer: {} -> {n}", self.n);
         }
 
@@ -945,7 +945,7 @@ impl<'a> LexerIterWithHistory<'a> {
         let column = current_state.column;
 
         if let Some(token) = scanned {
-            if constants::TRACE {
+            if (constants::TRACE & constants::TRACE_LEXER) == constants::TRACE_LEXER {
                 let token_result = token.clone();
 
                 if let Ok(token) = token_result {
@@ -963,7 +963,7 @@ impl<'a> LexerIterWithHistory<'a> {
         else {
             self.history.push(None);
 
-            if constants::TRACE {
+            if (constants::TRACE & constants::TRACE_LEXER) == constants::TRACE_LEXER {
                 println!(" -- (Line: {}, Col: {}) Lexed Token: None", line, column);
             }
 
