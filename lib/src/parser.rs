@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -163,6 +163,11 @@ impl<'a> Parser<'a> {
             println!("Parser: Statement");
         }
 
+        //Try match conditional statement
+        if let Some(cond_stmt) = self.conditional_statement()? {
+            return Ok(Some(cond_stmt));
+        }
+
         //Try match block statement
         if let Some(block_stmt) = self.block_statement()? {
             return Ok(Some(block_stmt));
@@ -223,6 +228,12 @@ impl<'a> Parser<'a> {
 
     //An error occurred. Scan until a synchronization token is found before continuing
     fn sync(&mut self) {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: SYNC");
+        }
+
+        let mut first_iter = true;
+
         while !self.is_at_end() {
             //Check for sync token
             if let Some(Ok(prev_token)) = self.lexer.peek_n(-1) {
@@ -231,23 +242,38 @@ impl<'a> Parser<'a> {
 
                 //If token is a sync token, stop and continue parsing
                 if matches!(prev_token_type, TokenType::Semi | TokenType::RBrace | TokenType::RBrac | TokenType::RParen) {
+                    if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+                        println!("Synced on previous token {}", prev_token_type.as_string());
+                    }
+
                     break;
                 }
             }
 
             if let Some(next) = self.lexer.current_token() {
-                match next {
-                    //If tokenization error, report and continue
-                    Err(next_err) => {
-                        self.errors.push(next_err);
-                    },
-                    Ok(next_token) => {
-                        let next_token_type = next_token.token_type();
+                //Don't sync on first token, to prevent infinite loop
+                if first_iter {
+                    first_iter = false;
+                }
+                else {
+                    match next {
+                        //If tokenization error, report and continue
+                        Err(next_err) => {
+                            self.errors.push(next_err);
+                        },
+                        Ok(next_token) => {
+                            let next_token_type = next_token.token_type();
+    
+                            //If next token is sync token, stop and continue parsing
+                            if matches!(next_token_type, TokenType::Class | TokenType::Func | TokenType::Let | TokenType::For
+                                | TokenType::Loop | TokenType::While | TokenType::If | TokenType::Else | TokenType::Print | TokenType::Return) {
 
-                        //If next token is sync token, stop and continue parsing
-                        if matches!(next_token_type, TokenType::Class | TokenType::Func | TokenType::Let | TokenType::For
-                            | TokenType::Loop | TokenType::While | TokenType::If | TokenType::Else | TokenType::Print | TokenType::Return) {
-                            break;
+                                if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+                                    println!("Synced on next token {}", next_token_type.as_string());
+                                }
+
+                                break;
+                            }
                         }
                     }
                 }
@@ -909,7 +935,7 @@ impl<'a> Parser<'a>  {
             let printtoken = token?;
 
             let token_type = printtoken.token_type();
-            if token_type == &TokenType::Print {
+            if let TokenType::Print = token_type {
                 //Advance lexer
                 self.lexer.advance();
 
@@ -1058,6 +1084,127 @@ impl<'a> Parser<'a>  {
         //Not a block statement
         self.lexer.set_position(start_position);
         Ok(None)
+    }
+
+    fn conditional_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: Conditional Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        let mut branches: Vec<ConditionalBranch> = Vec::new();
+
+        while !self.is_at_end() {
+            let loop_start = self.lexer.current_position();
+
+            //Match keyword if or else
+            if let Some(token) = self.lexer.current_token() {
+                let keyword_token = token?;
+                let keyword_token_type = keyword_token.token_type();
+
+                if let TokenType::If = keyword_token_type {
+                    //If there are any branches, this is not part of this conditional. Done.
+                    //Otherwise, this is the first branch of the conditional
+                    if !branches.is_empty() {
+                        break;
+                    }  
+
+                    //Advance lexer
+                    self.lexer.advance();
+                }
+                else if let TokenType::Else = keyword_token_type {
+                    if branches.is_empty() {
+                        //If there are no branches, this is invalid
+                        return Err(self.make_error(format!("Unexpected token {}.", keyword_token_type.as_string()), loop_start));
+                    }
+
+                    //Advance lexer
+                    self.lexer.advance();
+
+                    let else_if_position = self.lexer.current_position();
+
+                    //If next token is if, this will be followed by a condition, otherwise, last statement of the conditional
+                    if let Some(token) = self.lexer.current_token() {
+                        let if_token = token?;
+                        let if_token_type = if_token.token_type();
+
+                        if let TokenType::If = if_token_type {
+                            //Advance lexer
+                            self.lexer.advance();
+                        }
+                        else if let TokenType::LBrace = if_token_type {
+                            let body_position = self.lexer.current_position();
+
+                            if let Some(block) = self.block_statement()? {
+                                //Return conditional statement with else block
+                                return Ok(Some(StmtNode::Conditional(Conditional {
+                                    branches,
+                                    branch_else: Some(Box::new(block))
+                                }, self.location_at_position(start_position),
+                                self.location_at_position(self.lexer.current_position()))));
+                            }
+                            else {
+                                return Err(self.make_error(format!("Invalid {} body.", TokenType::Else.as_string()), body_position));
+                            }
+                        }
+                        else {
+                            return Err(self.make_error(format!("Unexpected token {}.", if_token_type.as_string()), else_if_position));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Unexpected end of input.".to_string(), else_if_position));
+                    }
+                }
+                else {
+                    //Not part of conditional. Done.
+                    break;
+                }
+
+                let condition_position = self.lexer.current_position();
+
+                //Match condition
+                if let Some(expr) = self.expression()? {
+                    let block_position = self.lexer.current_position();
+
+                    if let Some(block) = self.block_statement()? {
+                        //Add the branch to the collection
+                        branches.push(ConditionalBranch { 
+                            condition: expr, 
+                            body: block 
+                        });
+                    }
+                    else {
+                        return Err(self.make_error(format!("Invalid {} body.", if branches.is_empty() {
+                            TokenType::If.as_string()
+                        } else {
+                            format!("{} {}", TokenType::Else.as_string(), TokenType::If.as_string())
+                        }), block_position));
+                    }
+                }
+                else {
+                    return Err(self.make_error(format!("Invalid {} condition.", if branches.is_empty() {
+                        TokenType::If.as_string()
+                    } else {
+                        format!("{} {}", TokenType::Else.as_string(), TokenType::If.as_string())
+                    }), condition_position));
+                }
+            }
+        }
+
+        if branches.is_empty() {
+            //Not a conditional statement
+            self.lexer.set_position(start_position);
+            Ok(None)
+        }
+        else {
+            //Return conditional statement from branches
+            Ok(Some(StmtNode::Conditional(Conditional {
+                branches,
+                branch_else: None
+            }, self.location_at_position(start_position),
+            self.location_at_position(self.lexer.current_position()))))
+        }
     }
 
     fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {

@@ -28,6 +28,8 @@ pub enum Op {
     Pop,
     PopN,
     PopNLong,
+    Jump,
+    JumpIfFalse,
 
 
     //Unary operators ----------------
@@ -133,6 +135,8 @@ pub const OP_PRINT: u8          = 31;
 pub const OP_POP: u8            = 32;
 pub const OP_POP_N: u8          = 33;
 pub const OP_POP_N_LONG: u8     = 34;
+pub const OP_JUMP: u8           = 35;
+pub const OP_JUMP_IF_FALSE: u8  = 36;
 
 
 //Unary operators --------------------
@@ -199,6 +203,8 @@ lazy_static! {
         (OP_POP, Op::Pop),
         (OP_POP_N, Op::PopN),
         (OP_POP_N_LONG, Op::PopNLong),
+        (OP_JUMP, Op::Jump),
+        (OP_JUMP_IF_FALSE, Op::JumpIfFalse),
 
 
         //Unary operators ----------------------
@@ -264,6 +270,8 @@ lazy_static! {
         (Op::Pop, "OP_POP"),
         (Op::PopN, "OP_POP_N"),
         (Op::PopNLong, "OP_POP_N_LONG"),
+        (Op::Jump, "OP_JUMP"),
+        (Op::JumpIfFalse, "OP_JUMP_IF_FALSE"),
 
 
         //Unary operators ----------------------

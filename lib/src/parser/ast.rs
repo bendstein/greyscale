@@ -334,10 +334,34 @@ pub mod statement {
 
                     format!("{initial}\n{}", stmts_strings.join("\n"))
                 },
-                StmtNode::Conditional(_stmt, _, _) => {
+                StmtNode::Conditional(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
 
-                    initial
+                    let branches_strings: Vec<String> = stmt.branches.iter().enumerate()
+                        .map(|(index, branch)| {
+                            let initial = format!("{:indent$}|---- {}", "", if index == 0 {
+                                "If"
+                            } else {
+                                "Else If"
+                            }, indent = indent + 2);
+                            let condition = branch.condition.debug_string(indent + 12, Rc::clone(&program));
+                            let body = branch.body.debug_string(indent + 12, Rc::clone(&program));
+
+                            format!("{initial}\n{condition}\n{body}")
+                        })
+                        .collect();
+
+                    let conditional_string = format!("{initial}\n{}", branches_strings.join("\n"));
+
+                    if let Some(else_block) = &stmt.branch_else {
+                        let initial = format!("{:indent$}|---- {}", "", "Else", indent = indent + 2);
+                        let else_string = else_block.debug_string(indent + 12, program);
+
+                        format!("{conditional_string}\n{initial}\n{else_string}")
+                    }
+                    else {
+                        conditional_string
+                    }
                 },
                 StmtNode::Keyword(_stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);

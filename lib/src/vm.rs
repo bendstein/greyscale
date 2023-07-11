@@ -334,7 +334,49 @@ impl VirtualMachine {
                     else {
                         return Err(self.make_error("Expected an argument for PopN.".to_string()));
                     }
-                }
+                },
+                Op::Jump => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            
+                            self.ip = self.ip.saturating_add(n as usize);
+                        }
+                        else {
+                            return Err(self.make_error("Expected a 16-bit argument for Jump.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected an argument for Jump.".to_string()));
+                    }
+                },
+                Op::JumpIfFalse => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            
+                            let top = self.peek_value();
+
+                            let should_jump = if let Some(Value::Bool(condition)) = top {
+                                !*condition
+                            }
+                            else {
+                                matches!(top, None)
+                            };
+
+                            if should_jump {
+                                self.ip = self.ip.saturating_add(n as usize);
+                            }
+                        }
+                        else {
+                            return Err(self.make_error("Expected a 16-bit argument for JumpIfFalse.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected an argument for JumpIfFalse.".to_string()));
+                    }
+                },
+
 
                 //Unary operators  -----------------------------------------------------------------
                 //Arithmetic

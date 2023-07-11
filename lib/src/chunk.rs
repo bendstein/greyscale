@@ -24,6 +24,17 @@ impl Chunk {
         self.write(a2, line);
     }
 
+    pub fn patch(&mut self, offset: usize, code: u8) {
+        self.code[offset] = code;
+    }
+
+    pub fn patch_u16(&mut self, offset: usize, code: u16) {
+        let a1 = ((code >> 8) & 0xFF) as u8;
+        let a2 = (code & 0xFF) as u8;
+        self.patch(offset, a1);
+        self.patch(offset + 1, a2);
+    }
+
     pub fn add_const(&mut self, constant: Value) -> usize {
         self.constants.write(constant);
         self.constants.count() - 1

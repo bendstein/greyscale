@@ -107,8 +107,8 @@ impl<'a> Compiler<'a> {
             StmtNode::Block(block, _, end_loc) => {
                 self.stmt_block(block, end_loc);
             },
-            StmtNode::Conditional(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Conditional statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Conditional(conditional, loc, _) => {
+                self.stmt_conditional(conditional, loc);
             },
             StmtNode::Keyword(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string(), loc));
@@ -178,6 +178,25 @@ impl<'a> Compiler<'a> {
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} locals.", u16::MAX), location));
+        }
+    }
+
+    fn push_jump(&mut self, code: u8, location: Location) -> usize {
+        self.chunk.write(code, location.line);
+        //Get the address we're going to write the offset to so we can patch it later
+        let count = self.chunk.count();
+        self.chunk.write_u16(u16::MAX, location.line);
+        count
+    }
+
+    fn patch_jump(&mut self, offset: usize, location: Location) {
+        let jump_to = self.chunk.count().saturating_sub(offset + 2);
+
+        if jump_to <= u16::MAX as usize {
+            self.chunk.patch_u16(offset, jump_to as u16);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot jump over {} lines.", u16::MAX), location));
         }
     }
 
@@ -502,4 +521,42 @@ impl<'a> Compiler<'a> {
                 id_token_type.as_string()), loc));
         }
     }
+
+    fn stmt_conditional(&mut self, stmt: stmt::Conditional, loc: Location) {
+        let mut patch_locations: Vec<usize> = Vec::new();
+
+        for branch in stmt.branches {
+            //Compile condition
+            self.expr(branch.condition);
+
+            //If false, jump to next condition
+            let patch_location = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
+
+            //If true, pop condition
+            self.chunk.write(ops::OP_POP, loc.line);
+
+            //Compile statement
+            self.stmt(branch.body);
+
+            //Push unconditional jump to go to the end of the conditional after the body
+            patch_locations.push(self.push_jump(ops::OP_JUMP, loc));
+
+            //Patch jump addr after condition to jump here
+            self.patch_jump(patch_location, loc);
+
+            //If false, pop condition here
+            self.chunk.write(ops::OP_POP, loc.line);
+        }
+
+        if let Some(else_block) = stmt.branch_else {
+            //Compile statement
+            self.stmt(*else_block);
+        }
+
+        //For the end of each branch, jump here
+        for patch_at in patch_locations {
+            self.patch_jump(patch_at, loc);
+        }
+    }
+
 }

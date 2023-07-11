@@ -76,6 +76,8 @@ impl Chunk {
             Op::Pop => self.disassemble_instr_simple(op, offset, f),
             Op::PopN => self.disassemble_instr_w_arg(op, offset, f),
             Op::PopNLong => self.disassemble_instr_w_arg_long(op, offset, f),
+            Op::Jump => self.disassemble_jump(op, 1, offset, f),
+            Op::JumpIfFalse => self.disassemble_jump(op, 1, offset, f),
 
 
             //Unary operators -------------------------------------------------
@@ -159,6 +161,20 @@ impl Chunk {
         let combined = ((a1 as u16) << 8) + (a2 as u16);
 
         f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), combined))?;
+        f.write_char('\n')?;
+        Ok(offset + 3)
+    }
+
+    fn disassemble_jump(&self, op: Op, sign: isize, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+        //Combine the next 2 arguments to get the full index
+        let a1 = self[offset + 1];
+        let a2 = self[offset + 2];
+
+        let combined = ((a1 as u16) << 8) + (a2 as u16);
+
+        //Instead of writing the jump amount, write the location it will jump to
+        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), 
+            (offset + 3_usize).saturating_add_signed(combined as isize * sign)))?;
         f.write_char('\n')?;
         Ok(offset + 3)
     }
