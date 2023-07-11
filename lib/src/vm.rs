@@ -376,6 +376,32 @@ impl VirtualMachine {
                         return Err(self.make_error("Expected an argument for JumpIfFalse.".to_string()));
                     }
                 },
+                Op::JumpIfTrue => {
+                    if let Some(n0) = self.move_next() {
+                        if let Some(n1) = self.move_next() {
+                            let n = (n1 as u16) + ((n0 as u16) << 8);
+                            
+                            let top = self.peek_value();
+
+                            let should_jump = if let Some(Value::Bool(condition)) = top {
+                                *condition
+                            }
+                            else {
+                                false
+                            };
+
+                            if should_jump {
+                                self.ip = self.ip.saturating_add(n as usize);
+                            }
+                        }
+                        else {
+                            return Err(self.make_error("Expected a 16-bit argument for JumpIfTrue.".to_string()));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected an argument for JumpIfTrue.".to_string()));
+                    }
+                },
 
 
                 //Unary operators  -----------------------------------------------------------------
@@ -395,8 +421,6 @@ impl VirtualMachine {
                 Op::Divide => self.binary_op(&instr)?,
                 Op::Modulus => self.binary_op(&instr)?,
                 //Logical
-                Op::LogicalAnd => self.binary_op(&instr)?,
-                Op::LogicalOr => self.binary_op(&instr)?,
                 Op::LogicalXor => self.binary_op(&instr)?,
                 //Bitwise
                 Op::BitwiseAnd => self.binary_op(&instr)?,
@@ -631,38 +655,6 @@ impl VirtualMachine {
                     }
                     else if let Value::Double(b) = val_b {
                         self.push_value(Value::Double(a % b))?;
-                        return Ok(());
-                    }
-                }
-
-                Err(self.make_error("Operation is not valid for given types.".to_string()))
-            },
-            Op::LogicalAnd => {
-                if let Value::Bool(a) = val_a {
-                    //Short circuit
-                    if !a {
-                        self.push_value(Value::Bool(false))?;
-                        return Ok(());
-                    }
-
-                    if let Value::Bool(b) = val_b {
-                        self.push_value(Value::Bool(b))?;
-                        return Ok(());
-                    }
-                }
-
-                Err(self.make_error("Operation is not valid for given types.".to_string()))
-            },
-            Op::LogicalOr => {
-                if let Value::Bool(a) = val_a {
-                    //Short circuit
-                    if a {
-                        self.push_value(Value::Bool(true))?;
-                        return Ok(());
-                    }
-
-                    if let Value::Bool(b) = val_b {
-                        self.push_value(Value::Bool(b))?;
                         return Ok(());
                     }
                 }

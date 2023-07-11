@@ -30,6 +30,7 @@ pub enum Op {
     PopNLong,
     Jump,
     JumpIfFalse,
+    JumpIfTrue,
 
 
     //Unary operators ----------------
@@ -48,8 +49,6 @@ pub enum Op {
     Divide,
     Modulus,
     //Logical
-    LogicalAnd,
-    LogicalOr,
     LogicalXor,
     //Bitwise
     BitwiseAnd,
@@ -137,6 +136,7 @@ pub const OP_POP_N: u8          = 33;
 pub const OP_POP_N_LONG: u8     = 34;
 pub const OP_JUMP: u8           = 35;
 pub const OP_JUMP_IF_FALSE: u8  = 36;
+pub const OP_JUMP_IF_TRUE: u8   = 37;
 
 
 //Unary operators --------------------
@@ -156,24 +156,22 @@ pub const OP_MULTIPLY: u8       = 62;
 pub const OP_DIVIDE: u8         = 63;
 pub const OP_MODULUS: u8        = 64;
 //Logical
-pub const OP_LOGICAL_AND: u8    = 65;
-pub const OP_LOGICAL_OR: u8     = 66;
-pub const OP_LOGICAL_XOR: u8    = 67;
+pub const OP_LOGICAL_XOR: u8    = 65;
 //Bitwise
-pub const OP_BITWISE_AND: u8    = 68;
-pub const OP_BITWISE_OR: u8     = 69;
-pub const OP_BITWISE_XOR: u8    = 70;
-pub const OP_BITWISE_LSHIFT: u8 = 71;
-pub const OP_BITWISE_RSHIFT: u8 = 72;
+pub const OP_BITWISE_AND: u8    = 66;
+pub const OP_BITWISE_OR: u8     = 67;
+pub const OP_BITWISE_XOR: u8    = 68;
+pub const OP_BITWISE_LSHIFT: u8 = 69;
+pub const OP_BITWISE_RSHIFT: u8 = 70;
 //Comparison
-pub const OP_EQUAL: u8          = 80;
-pub const OP_NOT_EQUAL: u8      = 81;
-pub const OP_GREATER: u8        = 82;
-pub const OP_LESS: u8           = 83;
-pub const OP_GREATER_EQUAL: u8  = 84;
-pub const OP_LESS_EQUAL: u8     = 85;
+pub const OP_EQUAL: u8          = 71;
+pub const OP_NOT_EQUAL: u8      = 72;
+pub const OP_GREATER: u8        = 73;
+pub const OP_LESS: u8           = 74;
+pub const OP_GREATER_EQUAL: u8  = 75;
+pub const OP_LESS_EQUAL: u8     = 76;
 //Internal
-pub const OP_CONCAT: u8         = 86;
+pub const OP_CONCAT: u8         = 77;
 
 
 lazy_static! {
@@ -205,6 +203,7 @@ lazy_static! {
         (OP_POP_N_LONG, Op::PopNLong),
         (OP_JUMP, Op::Jump),
         (OP_JUMP_IF_FALSE, Op::JumpIfFalse),
+        (OP_JUMP_IF_TRUE, Op::JumpIfTrue),
 
 
         //Unary operators ----------------------
@@ -224,8 +223,6 @@ lazy_static! {
         (OP_DIVIDE, Op::Divide),
         (OP_MODULUS, Op::Modulus),
         //Logical
-        (OP_LOGICAL_AND, Op::LogicalAnd),
-        (OP_LOGICAL_OR, Op::LogicalOr),
         (OP_LOGICAL_XOR, Op::LogicalXor),
         //Bitwise
         (OP_BITWISE_AND, Op::BitwiseAnd),
@@ -272,6 +269,7 @@ lazy_static! {
         (Op::PopNLong, "OP_POP_N_LONG"),
         (Op::Jump, "OP_JUMP"),
         (Op::JumpIfFalse, "OP_JUMP_IF_FALSE"),
+        (Op::JumpIfTrue, "OP_JUMP_IF_TRUE"),
 
 
         //Unary operators ----------------------
@@ -291,8 +289,6 @@ lazy_static! {
         (Op::Divide, "OP_DIVIDE"),
         (Op::Modulus, "OP_MODULUS"),
         //Logical
-        (Op::LogicalAnd, "OP_LOGICAL_AND"),
-        (Op::LogicalOr, "OP_LOGICAL_OR"),
         (Op::LogicalXor, "OP_LOGICAL_XOR"),
         //Bitwise
         (Op::BitwiseAnd, "OP_BITWISE_AND"),

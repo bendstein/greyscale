@@ -276,21 +276,33 @@ impl<'a> Compiler<'a> {
         //Write first operand
         self.expr(*expr.left);
 
-        //For each following part, write the operand followed by the operator
+        //For each following part, write the operand and operator
         for operation in expr.right {
-            self.expr(*operation.right);
-            
             let token_type = operation.op.token_type();
 
+            //Handle short circuiting ops
+            let short_circuit_patch_loc = match token_type {
+                TokenType::PipePipe => Some(self.short_circuit(ops::OP_JUMP_IF_TRUE, location)),
+                TokenType::AmpAmp => Some(self.short_circuit(ops::OP_JUMP_IF_FALSE, location)),
+                _ => None
+            };
+
+            self.expr(*operation.right);
+
+            //If short circuiting operator, patch jump location to here to prevent eval of the rhs
+            if let Some(patch_at) = short_circuit_patch_loc {
+                self.patch_jump(patch_at, location);
+            }
+            
             match token_type {
+                TokenType::PipePipe => {}, //Short circuiting ops already handled
+                TokenType::AmpAmp => {},
                 TokenType::Plus => self.chunk.write(ops::OP_ADD, location.line),
                 TokenType::Minus => self.chunk.write(ops::OP_SUBTRACT, location.line),
                 TokenType::Star => self.chunk.write(ops::OP_MULTIPLY, location.line),
                 TokenType::Slash => self.chunk.write(ops::OP_DIVIDE, location.line),
                 TokenType::Percent => self.chunk.write(ops::OP_MODULUS, location.line),
-                TokenType::PipePipe => self.chunk.write(ops::OP_LOGICAL_OR, location.line),
                 TokenType::CaretCaret => self.chunk.write(ops::OP_LOGICAL_XOR, location.line),
-                TokenType::AmpAmp => self.chunk.write(ops::OP_LOGICAL_AND, location.line),
                 TokenType::Pipe => self.chunk.write(ops::OP_BITWISE_OR, location.line),
                 TokenType::Caret => self.chunk.write(ops::OP_BITWISE_XOR, location.line),
                 TokenType::Amp => self.chunk.write(ops::OP_BITWISE_AND, location.line),
@@ -308,6 +320,16 @@ impl<'a> Compiler<'a> {
                 }
             }
         }
+    }
+
+    fn short_circuit(&mut self, short_circuit_op: u8, location: Location) -> usize {
+        let short_circuit_loc = self.push_jump(short_circuit_op, location);
+
+        //If didn't short circuit, pop value from stack so next part can be evaluated
+        self.chunk.write(ops::OP_POP, location.line);
+
+        //Return patch location
+        short_circuit_loc
     }
 
     fn expr_interpolated_string(&mut self, interp: expr::InterpolatedString, location: Location) {
@@ -385,6 +407,8 @@ impl<'a> Compiler<'a> {
 
         let maybe_infix_op = match assignment_token_type {
             TokenType::Equal => None,
+            TokenType::PipePipeEqual => None, //Short circuit ops handled elsewhere
+            TokenType::AmpAmpEqual => None,
             TokenType::PlusEqual => Some(ops::OP_ADD),
             TokenType::MinusEqual => Some(ops::OP_SUBTRACT),
             TokenType::StarEqual => Some(ops::OP_MULTIPLY),
@@ -393,9 +417,7 @@ impl<'a> Compiler<'a> {
             TokenType::CaretEqual => Some(ops::OP_BITWISE_XOR),
             TokenType::CaretCaretEqual => Some(ops::OP_LOGICAL_XOR),
             TokenType::AmpEqual => Some(ops::OP_BITWISE_AND),
-            TokenType::AmpAmpEqual => Some(ops::OP_LOGICAL_AND),
             TokenType::PipeEqual => Some(ops::OP_BITWISE_OR),
-            TokenType::PipePipeEqual =>Some(ops::OP_LOGICAL_OR),
             TokenType::LessLessEqual => Some(ops::OP_BITWISE_LSHIFT),
             TokenType::GreaterGreaterEqual => Some(ops::OP_BITWISE_RSHIFT),
             _ => {
@@ -424,6 +446,35 @@ impl<'a> Compiler<'a> {
 
             //Push infix op
             self.chunk.write(infix_op, location.line);
+        }
+        //Handle short circuting operators
+        else if matches!(assignment_token_type, TokenType::AmpAmpEqual | TokenType::PipePipeEqual) {
+
+            //LHS
+            //If id is a local
+            if let Some(index) = id_index {
+                //Push local slot
+                self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
+            }
+            //If it's a global or undefined
+            else {
+                //Push identifier
+                self.push_const(ops::OP_GET_GLOBAL, ops::OP_GET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
+            }
+
+            //Short-circuiting op
+            let patch_at = if let TokenType::PipePipeEqual = assignment_token_type {
+                self.short_circuit(ops::OP_JUMP_IF_TRUE, location)
+            }
+            else {
+                self.short_circuit(ops::OP_JUMP_IF_FALSE, location)
+            };
+
+            //Push assigned expression
+            self.expr(*expr.assignment);
+
+            //Patch jump location to here to prevent eval of the rhs
+            self.patch_jump(patch_at, location);
         }
         //Otherwise, just push assigned expression
         else {

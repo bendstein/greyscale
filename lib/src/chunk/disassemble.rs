@@ -78,6 +78,7 @@ impl Chunk {
             Op::PopNLong => self.disassemble_instr_w_arg_long(op, offset, f),
             Op::Jump => self.disassemble_jump(op, 1, offset, f),
             Op::JumpIfFalse => self.disassemble_jump(op, 1, offset, f),
+            Op::JumpIfTrue => self.disassemble_jump(op, 1, offset, f),
 
 
             //Unary operators -------------------------------------------------
@@ -97,8 +98,6 @@ impl Chunk {
             Op::Divide => self.disassemble_instr_simple(op, offset, f),
             Op::Modulus => self.disassemble_instr_simple(op, offset, f),
             //Logical
-            Op::LogicalAnd => self.disassemble_instr_simple(op, offset, f),
-            Op::LogicalOr => self.disassemble_instr_simple(op, offset, f),
             Op::LogicalXor => self.disassemble_instr_simple(op, offset, f),
             //Bitwise
             Op::BitwiseAnd => self.disassemble_instr_simple(op, offset, f),

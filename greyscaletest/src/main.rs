@@ -13,20 +13,12 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program = "
-    if 1 + 1 == 3 {
+    if 1 + 1 == 3 && 1 + 1 == 2 {
         print 'a';
     }
-    else if 1 + 1 == 4 {
+    else {
         print 'b';
     }
-    else if 1 + 1 == 2 {
-        print 'c';
-    }
-    else {
-        print 'd';
-    }
-
-    print 'e';
     ";
 
     if (constants::TRACE & constants::TRACE_OUTPUT_INPUT) == constants::TRACE_OUTPUT_INPUT {
