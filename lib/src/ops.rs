@@ -31,6 +31,7 @@ pub enum Op {
     Jump,
     JumpIfFalse,
     JumpIfTrue,
+    Loop,
 
 
     //Unary operators ----------------
@@ -137,6 +138,7 @@ pub const OP_POP_N_LONG: u8     = 34;
 pub const OP_JUMP: u8           = 35;
 pub const OP_JUMP_IF_FALSE: u8  = 36;
 pub const OP_JUMP_IF_TRUE: u8   = 37;
+pub const OP_LOOP: u8           = 38;
 
 
 //Unary operators --------------------
@@ -204,6 +206,7 @@ lazy_static! {
         (OP_JUMP, Op::Jump),
         (OP_JUMP_IF_FALSE, Op::JumpIfFalse),
         (OP_JUMP_IF_TRUE, Op::JumpIfTrue),
+        (OP_LOOP, Op::Loop),
 
 
         //Unary operators ----------------------
@@ -270,6 +273,7 @@ lazy_static! {
         (Op::Jump, "OP_JUMP"),
         (Op::JumpIfFalse, "OP_JUMP_IF_FALSE"),
         (Op::JumpIfTrue, "OP_JUMP_IF_TRUE"),
+        (Op::Loop, "OP_LOOP"),
 
 
         //Unary operators ----------------------

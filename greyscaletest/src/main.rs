@@ -12,12 +12,16 @@ use greyscale::parser::Parser;
 use greyscale::vm::error::GreyscaleError;
 
 fn main() {
-    let program = "
-    if 1 + 1 == 3 && 1 + 1 == 2 {
-        print 'a';
+    let program: &str = "
+    /*
+    for let i = 0; i < 5; i += 1 {
+        for let j = 0; j < i; j += 1 {
+            print `{i} + {j} = {i + j}`;
+        }
     }
-    else {
-        print 'b';
+    */
+    for let i = 0; i < 2; i += 1 {
+        print i;
     }
     ";
 
@@ -67,7 +71,7 @@ fn main() {
     let exec_start = Instant::now();
 
     let mut vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
-        ignore_final_pop: true
+        ignore_final_pop: false
     });
 
     let execute_result = vm.execute();

@@ -1,4 +1,4 @@
-use std::fmt::{Write, Display};
+use std::fmt::{Display};
 
 use crate::ops::Op;
 
@@ -8,20 +8,22 @@ type Result = std::result::Result<usize, std::fmt::Error>;
 
 impl Chunk {
 
-    pub fn disassemble(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("== {} ==\n", self.name.as_ref().unwrap_or(&String::default())))?;
-        
+    pub fn disassemble(&self) -> String {
+        let mut s = String::new();
+
+        s.push_str(&format!("== {} ==\n", self.name.as_ref().unwrap_or(&String::default())));
+
         let mut offset = 0_usize;
         
         while offset < self.code.len() {
-            offset = self.disassemble_instr(offset, f)?;
+            offset = self.disassemble_instr(offset, &mut s);
         }
         
-        Ok(())
+        s
     }
     
-    fn disassemble_instr(&self, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{:04X?}  ", offset))?;
+    pub fn disassemble_instr(&self, offset: usize, s: &mut String) -> usize {
+        s.push_str(&format!("{:04X?}  ", offset));
         
         let line_count = self.metadata.line_count();
 
@@ -41,10 +43,10 @@ impl Chunk {
         let curr_line = self.metadata.get_line(offset);
 
         if offset > 0 && prev_line == curr_line {
-            f.write_fmt(format_args!("{: >line_pad$}  ", "|"))?;
+            s.push_str(&format!("{: >line_pad$}  ", "|"));
         }
         else {
-            f.write_fmt(format_args!("{:0>line_pad$}  ", curr_line))?;
+            s.push_str(&format!("{:0>line_pad$}  ", curr_line));
         }
 
         let instr = self[offset];
@@ -53,118 +55,119 @@ impl Chunk {
         match op {
             //Declarations And Variables -------------------------------------------
             //Constants
-            Op::Constant => self.disassemble_instr_const(op, offset, f),
-            Op::ConstantLong => self.disassemble_instr_const_long(op, offset, f),
+            Op::Constant => self.disassemble_instr_const(op, offset, s),
+            Op::ConstantLong => self.disassemble_instr_const_long(op, offset, s),
             //Globals
-            Op::DefineGlobal => self.disassemble_instr_const(op, offset, f),
-            Op::DefineGlobalLong => self.disassemble_instr_const_long(op, offset, f),
-            Op::GetGlobal => self.disassemble_instr_const(op, offset, f),
-            Op::GetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
-            Op::SetGlobal => self.disassemble_instr_const(op, offset, f),
-            Op::SetGlobalLong => self.disassemble_instr_const_long(op, offset, f),
+            Op::DefineGlobal => self.disassemble_instr_const(op, offset, s),
+            Op::DefineGlobalLong => self.disassemble_instr_const_long(op, offset, s),
+            Op::GetGlobal => self.disassemble_instr_const(op, offset, s),
+            Op::GetGlobalLong => self.disassemble_instr_const_long(op, offset, s),
+            Op::SetGlobal => self.disassemble_instr_const(op, offset, s),
+            Op::SetGlobalLong => self.disassemble_instr_const_long(op, offset, s),
             //Locals
-            Op::GetLocal => self.disassemble_instr_w_arg(op, offset, f),
-            Op::GetLocalLong => self.disassemble_instr_w_arg_long(op, offset, f),
-            Op::SetLocal => self.disassemble_instr_w_arg(op, offset, f),
-            Op::SetLocalLong => self.disassemble_instr_w_arg_long(op, offset, f),
+            Op::GetLocal => self.disassemble_instr_w_arg(op, offset, s),
+            Op::GetLocalLong => self.disassemble_instr_w_arg_long(op, offset, s),
+            Op::SetLocal => self.disassemble_instr_w_arg(op, offset, s),
+            Op::SetLocalLong => self.disassemble_instr_w_arg_long(op, offset, s),
 
 
             //Keywords --------------------------------------------------------
-            Op::Return => self.disassemble_instr_simple(op, offset, f),
-            Op::Print => self.disassemble_instr_simple(op, offset, f),
+            Op::Return => self.disassemble_instr_simple(op, offset, s),
+            Op::Print => self.disassemble_instr_simple(op, offset, s),
             //Internal
-            Op::Pop => self.disassemble_instr_simple(op, offset, f),
-            Op::PopN => self.disassemble_instr_w_arg(op, offset, f),
-            Op::PopNLong => self.disassemble_instr_w_arg_long(op, offset, f),
-            Op::Jump => self.disassemble_jump(op, 1, offset, f),
-            Op::JumpIfFalse => self.disassemble_jump(op, 1, offset, f),
-            Op::JumpIfTrue => self.disassemble_jump(op, 1, offset, f),
+            Op::Pop => self.disassemble_instr_simple(op, offset, s),
+            Op::PopN => self.disassemble_instr_w_arg(op, offset, s),
+            Op::PopNLong => self.disassemble_instr_w_arg_long(op, offset, s),
+            Op::Jump => self.disassemble_jump(op, 1, offset, s),
+            Op::JumpIfFalse => self.disassemble_jump(op, 1, offset, s),
+            Op::JumpIfTrue => self.disassemble_jump(op, 1, offset, s),
+            Op::Loop => self.disassemble_jump(op, -1, offset, s),
 
 
             //Unary operators -------------------------------------------------
             //Arithmetic
-            Op::Negate => self.disassemble_instr_simple(op, offset, f),
+            Op::Negate => self.disassemble_instr_simple(op, offset, s),
             //Logical
-            Op::LogicalNot => self.disassemble_instr_simple(op, offset, f),
+            Op::LogicalNot => self.disassemble_instr_simple(op, offset, s),
             //Bitwise
-            Op::BitwiseNot => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseNot => self.disassemble_instr_simple(op, offset, s),
 
 
             //Binary operators ------------------------------------------------
             //Arithmetic
-            Op::Add => self.disassemble_instr_simple(op, offset, f),
-            Op::Subtract => self.disassemble_instr_simple(op, offset, f),
-            Op::Multiply => self.disassemble_instr_simple(op, offset, f),
-            Op::Divide => self.disassemble_instr_simple(op, offset, f),
-            Op::Modulus => self.disassemble_instr_simple(op, offset, f),
+            Op::Add => self.disassemble_instr_simple(op, offset, s),
+            Op::Subtract => self.disassemble_instr_simple(op, offset, s),
+            Op::Multiply => self.disassemble_instr_simple(op, offset, s),
+            Op::Divide => self.disassemble_instr_simple(op, offset, s),
+            Op::Modulus => self.disassemble_instr_simple(op, offset, s),
             //Logical
-            Op::LogicalXor => self.disassemble_instr_simple(op, offset, f),
+            Op::LogicalXor => self.disassemble_instr_simple(op, offset, s),
             //Bitwise
-            Op::BitwiseAnd => self.disassemble_instr_simple(op, offset, f),
-            Op::BitwiseOr => self.disassemble_instr_simple(op, offset, f),
-            Op::BitwiseXor => self.disassemble_instr_simple(op, offset, f),
-            Op::BitwiseLShift => self.disassemble_instr_simple(op, offset, f),
-            Op::BitwiseRShift => self.disassemble_instr_simple(op, offset, f),
+            Op::BitwiseAnd => self.disassemble_instr_simple(op, offset, s),
+            Op::BitwiseOr => self.disassemble_instr_simple(op, offset, s),
+            Op::BitwiseXor => self.disassemble_instr_simple(op, offset, s),
+            Op::BitwiseLShift => self.disassemble_instr_simple(op, offset, s),
+            Op::BitwiseRShift => self.disassemble_instr_simple(op, offset, s),
             //Comparison
-            Op::Equal => self.disassemble_instr_simple(op, offset, f),
-            Op::NotEqual => self.disassemble_instr_simple(op, offset, f),
-            Op::Greater => self.disassemble_instr_simple(op, offset, f),
-            Op::Less => self.disassemble_instr_simple(op, offset, f),
-            Op::GreaterEqual => self.disassemble_instr_simple(op, offset, f),
-            Op::LessEqual => self.disassemble_instr_simple(op, offset, f),
+            Op::Equal => self.disassemble_instr_simple(op, offset, s),
+            Op::NotEqual => self.disassemble_instr_simple(op, offset, s),
+            Op::Greater => self.disassemble_instr_simple(op, offset, s),
+            Op::Less => self.disassemble_instr_simple(op, offset, s),
+            Op::GreaterEqual => self.disassemble_instr_simple(op, offset, s),
+            Op::LessEqual => self.disassemble_instr_simple(op, offset, s),
             //Internal
-            Op::Concat => self.disassemble_instr_simple(op, offset, f),
+            Op::Concat => self.disassemble_instr_simple(op, offset, s),
 
             //Other -----------------------------------------------------------
-            Op::Unknown(_) => self.disassemble_instr_unknown(instr, offset, f)
+            Op::Unknown(_) => self.disassemble_instr_unknown(instr, offset, s)
         }
     }
     
-    fn disassemble_instr_simple(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{}\n", op.name_padded()))?;
-        Ok(offset + 1)
+    fn disassemble_instr_simple(&self, op: Op, offset: usize, s: &mut String) -> usize {
+        s.push_str(&format!("{}\n", op.name_padded()));
+        offset + 1
     }
     
-    fn disassemble_instr_const(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{}  {:04X?}  ", op.name_padded(), self[offset + 1]))?;
-        self.write_value(self[offset + 1] as usize, f)?;
-        f.write_char('\n')?;
-        Ok(offset + 2)
+    fn disassemble_instr_const(&self, op: Op, offset: usize, s: &mut String) -> usize {
+        s.push_str(&format!("{}  {:04X?}  ", op.name_padded(), self[offset + 1]));
+        self.write_value(self[offset + 1] as usize, s);
+        s.push('\n');
+        offset + 2
     }
 
-    fn disassemble_instr_const_long(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn disassemble_instr_const_long(&self, op: Op, offset: usize, s: &mut String) -> usize {
         //Combine the next 2 arguments to get the full index
         let a1 = self[offset + 1];
         let a2 = self[offset + 2];
 
         let combined = ((a1 as u16) << 8) + (a2 as u16);
 
-        f.write_fmt(format_args!("{}  {:04X?}  ", op.name_padded(), combined))?;
+        s.push_str(&format!("{}  {:04X?}  ", op.name_padded(), combined));
 
-        self.write_value(combined as usize, f)?;
-        f.write_char('\n')?;
-        Ok(offset + 3)
+        self.write_value(combined as usize, s);
+        s.push('\n');
+        offset + 3
     }
 
-    fn disassemble_instr_w_arg(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), self[offset + 1]))?;
-        f.write_char('\n')?;
-        Ok(offset + 2)
+    fn disassemble_instr_w_arg(&self, op: Op, offset: usize, s: &mut String) -> usize {
+        s.push_str(&format!("{}  {:04X?}", op.name_padded(), self[offset + 1]));
+        s.push('\n');
+        offset + 2
     }
 
-    fn disassemble_instr_w_arg_long(&self, op: Op, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn disassemble_instr_w_arg_long(&self, op: Op, offset: usize, s: &mut String) -> usize {
         //Combine the next 2 arguments to get the full index
         let a1 = self[offset + 1];
         let a2 = self[offset + 2];
 
         let combined = ((a1 as u16) << 8) + (a2 as u16);
 
-        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), combined))?;
-        f.write_char('\n')?;
-        Ok(offset + 3)
+        s.push_str(&format!("{}  {:04X?}", op.name_padded(), combined));
+        s.push('\n');
+        offset + 3
     }
 
-    fn disassemble_jump(&self, op: Op, sign: isize, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
+    fn disassemble_jump(&self, op: Op, sign: isize, offset: usize, s: &mut String) -> usize {
         //Combine the next 2 arguments to get the full index
         let a1 = self[offset + 1];
         let a2 = self[offset + 2];
@@ -172,53 +175,51 @@ impl Chunk {
         let combined = ((a1 as u16) << 8) + (a2 as u16);
 
         //Instead of writing the jump amount, write the location it will jump to
-        f.write_fmt(format_args!("{}  {:04X?}", op.name_padded(), 
-            (offset + 3_usize).saturating_add_signed(combined as isize * sign)))?;
-        f.write_char('\n')?;
-        Ok(offset + 3)
+        s.push_str(&format!("{}  {:04X?}", op.name_padded(), 
+            (offset + 3_usize).saturating_add_signed(combined as isize * sign)));
+        s.push('\n');
+        offset + 3
     }
 
-    fn write_value(&self, n: usize, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn write_value(&self, n: usize, s: &mut String) {
 
         if n >= self.constants.count() {
-            f.write_fmt(format_args!("<undefined>"))?;
+            s.push_str(&format!("<undefined>"));
         }
         else {
-            f.write_fmt(format_args!("{}", self.constants[n]))?;
+            s.push_str(&format!("{}", self.constants[n]));
         }
-
-        Ok(())
     }
 
-    fn disassemble_instr_unknown(&self, instr: u8, offset: usize, f: &mut std::fmt::Formatter<'_>) -> Result {
-        f.write_fmt(format_args!("{}\n", Op::Unknown(instr).name_padded()))?;
-        Ok(offset + 1)
+    fn disassemble_instr_unknown(&self, instr: u8, offset: usize, s: &mut String) -> usize {
+        s.push_str(&format!("{}\n", Op::Unknown(instr).name_padded()));
+        offset + 1
     }
     
 }
 
-pub struct FormattableInstr<'a> {
-    chunk: &'a Chunk,
-    offset: usize
-}
+// pub struct FormattableInstr<'a> {
+//     chunk: &'a Chunk,
+//     offset: usize
+// }
 
-impl<'a> FormattableInstr<'a> {
-    pub fn new(chunk: &'a Chunk, offset: usize) -> Self {
-        Self {
-            chunk,
-            offset
-        }
-    }
+// impl<'a> FormattableInstr<'a> {
+//     pub fn new(chunk: &'a Chunk, offset: usize) -> Self {
+//         Self {
+//             chunk,
+//             offset
+//         }
+//     }
 
-    pub fn with_offset(mut self, offset: usize) -> Self {
-        self.offset = offset;
-        self
-    }
-}
+//     pub fn with_offset(mut self, offset: usize) -> Self {
+//         self.offset = offset;
+//         self
+//     }
+// }
 
-impl<'a> Display for FormattableInstr<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.chunk.disassemble_instr(self.offset, f)?;
-        Ok(())
-    }
-}
+// impl<'a> Display for FormattableInstr<'a> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         self.chunk.disassemble_instr(self.offset, s);
+//         Ok(())
+//     }
+// }

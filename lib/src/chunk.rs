@@ -104,7 +104,7 @@ impl<Idx> IndexMut<Idx> for Chunk
 
 impl Display for Chunk {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.disassemble(f)
+        f.write_fmt(format_args!("{}", self.disassemble()))
     }
 }
 

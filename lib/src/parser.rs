@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -161,6 +161,21 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
         if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Statement");
+        }
+
+        //Try match loop statement
+        if let Some(loop_stmt) = self.loop_statement()? {
+            return Ok(Some(loop_stmt));
+        }
+
+        //Try match while statement
+        if let Some(while_stmt) = self.while_statement()? {
+            return Ok(Some(while_stmt));
+        }
+
+        //Try match for statement
+        if let Some(for_stmt) = self.for_statement()? {
+            return Ok(Some(for_stmt));
         }
 
         //Try match conditional statement
@@ -1205,6 +1220,217 @@ impl<'a> Parser<'a>  {
             }, self.location_at_position(start_position),
             self.location_at_position(self.lexer.current_position()))))
         }
+    }
+
+    fn loop_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: Loop Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        if let Some(token) = self.lexer.current_token() {
+            let loop_token = token?;
+            let loop_token_type = loop_token.token_type();
+
+            if let TokenType::Loop = loop_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                let block_start = self.lexer.current_position();
+
+                //Match block
+                let block = self.block_statement()?
+                    .ok_or_else(|| self.make_error("Expected a body for the loop.".to_string(), block_start))?;
+
+                return Ok(Some(StmtNode::Loop(Loop {
+                    body: Box::new(block)
+                }, self.location_at_position(start_position),
+                self.location_at_position(self.lexer.current_position()))));
+            }
+        }
+
+        //Not a loop statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn while_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: While Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        if let Some(token) = self.lexer.current_token() {
+            let while_token = token?;
+            let while_token_type = while_token.token_type();
+
+            if let TokenType::While = while_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                let expr_start = self.lexer.current_position();
+
+                //Match expression
+                let expr = self.expression()?
+                    .ok_or_else(|| self.make_error("Expected an expression for the while loop.".to_string(), expr_start))?;
+
+                let block_start = self.lexer.current_position();
+
+                //Match block
+                let block = self.block_statement()?
+                    .ok_or_else(|| self.make_error("Expected a body for the while loop.".to_string(), block_start))?;
+
+                return Ok(Some(StmtNode::While(While {
+                    condition: Box::new(expr),
+                    body: Box::new(block)
+                }, self.location_at_position(start_position),
+                self.location_at_position(self.lexer.current_position()))));
+            }
+        }
+
+        //Not a while statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn for_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: For Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        if let Some(token) = self.lexer.current_token() {
+            let for_token = token?;
+            let for_token_type = for_token.token_type();
+
+            if let TokenType::For = for_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                let mut enclosed = false;
+
+                //Match optional paren
+                if let Some(token) = self.lexer.current_token() {
+                    let lparen_token = token?;
+                    let lparen_token_type = lparen_token.token_type();
+
+                    if let TokenType::LParen = lparen_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+
+                        enclosed = true;
+                    }
+                }
+
+                let dec_start = self.lexer.current_position();
+
+                //Match declaration or semicolon
+                let declaration: Option<Box<StmtNode>>;
+
+                if let Some(dec) = self.declaration_statement()? {
+                    declaration = Some(Box::new(dec));
+                }
+                else if let Some(token) = self.lexer.current_token() {
+                    let semi_token = token?;
+                    let semi_token_type = semi_token.token_type();
+
+                    if let TokenType::Semi = semi_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+                        declaration = None;
+                    }
+                    else {
+                        return Err(self.make_error("Expected a declaration statement or semicolon.".to_string(), dec_start));
+                    }
+                }
+                else {
+                    return Err(self.make_error("Expected a declaration statement or semicolon.".to_string(), dec_start));
+                }
+
+                let cond_start = self.lexer.current_position();
+
+                //Match condition or semicolon
+                let condition: Option<Box<ExprNode>>;
+
+                if let Some(expr) = self.expression()? {
+                    condition = Some(Box::new(expr));
+
+                    if let Some(token) = self.lexer.current_token() {
+                        let semi_token = token?;
+                        let semi_token_type = semi_token.token_type();
+    
+                        if let TokenType::Semi = semi_token_type {
+                            //Advance lexer
+                            self.lexer.advance();
+                        }
+                        else {
+                            return Err(self.make_error("Expected a semicolon.".to_string(), cond_start));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected a semicolon.".to_string(), cond_start));
+                    }
+                }
+                else if let Some(token) = self.lexer.current_token() {
+                    let semi_token = token?;
+                    let semi_token_type = semi_token.token_type();
+
+                    if let TokenType::Semi = semi_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+                        condition = None;
+                    }
+                    else {
+                        return Err(self.make_error("Expected an expression or semicolon.".to_string(), cond_start));
+                    }
+                }
+                else {
+                    return Err(self.make_error("Expected an expression or semicolon.".to_string(), cond_start));
+                }
+
+                //Match optional action
+                let action: Option<Box<ExprNode>> = self.expression()?.map(Box::new);
+
+                //If open paren was present, match close paren
+                if enclosed {
+                    let rparen_start = self.lexer.current_position();
+
+                    if let Some(token) = self.lexer.current_token() {
+                        let rparen_token = token?;
+                        let rparen_token_type = rparen_token.token_type();
+    
+                        if let TokenType::RParen = rparen_token_type {
+                            //Advance lexer
+                            self.lexer.advance();
+                        }
+                        else {
+                            return Err(self.make_error("Mismatched parentheses.".to_string(), rparen_start));
+                        }
+                    }
+                }
+
+                let block_start = self.lexer.current_position();
+
+                //Match block
+                let block = self.block_statement()?
+                    .ok_or_else(|| self.make_error("Expected a body for the for loop.".to_string(), block_start))?;
+
+                return Ok(Some(StmtNode::For(For {
+                    declaration,
+                    condition,
+                    action,
+                    body: Box::new(block)
+                }, self.location_at_position(start_position),
+                self.location_at_position(self.lexer.current_position()))));
+            }
+        }
+
+        //Not a for statement
+        self.lexer.set_position(start_position);
+        Ok(None)
     }
 
     fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {

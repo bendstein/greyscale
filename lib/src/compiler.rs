@@ -122,14 +122,14 @@ impl<'a> Compiler<'a> {
             StmtNode::Print(print, loc, _) => {
                 self.stmt_print(print, loc);
             },
-            StmtNode::For(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("For statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::For(stmt, loc, end_loc) => {
+                self.stmt_for(stmt, loc, end_loc);
             },
-            StmtNode::While(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("While statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::While(stmt, loc, _) => {
+                self.stmt_while(stmt, loc);
             },
-            StmtNode::Loop(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Loop statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Loop(stmt, loc, _) => {
+                self.stmt_loop(stmt, loc);
             },
             StmtNode::Return(_, loc, _) => {
                 self.errors.push(GreyscaleError::CompileErr("Return statement compilation not yet implemented.".to_string(), loc));
@@ -200,9 +200,20 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn resolve_local(&self, name: &str) -> Option<usize> {
-        let mut position = 0;
+    fn push_loop(&mut self, loop_start: usize, location: Location) {
+        self.chunk.write(ops::OP_LOOP, location.line);
 
+        let offset = (self.chunk.count() + 2).saturating_sub(loop_start);
+
+        if offset <= u16::MAX as usize {
+            self.chunk.write_u16(offset as u16, location.line);
+        }
+        else {
+            self.errors.push(GreyscaleError::CompileErr(format!("Cannot jump over {} lines.", u16::MAX), location));
+        }
+    }
+
+    fn resolve_local(&self, name: &str) -> Option<usize> {
         for i in (0..self.locals.len()).rev() {
             let scope = &self.locals[i];
 
@@ -210,10 +221,13 @@ impl<'a> Compiler<'a> {
                 let elem = &scope[j];
 
                 if elem == name {
+                    let mut position = scope.len() - j - 1;
+
+                    for x in 0..i {
+                        position += self.locals[x].len();
+                    }
+
                     return Some(position);
-                }
-                else {
-                    position += 1;
                 }
             }
         }
@@ -610,4 +624,100 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    fn stmt_loop(&mut self, stmt: stmt::Loop, loc: Location) {
+        let loop_start = self.chunk.count();
+
+        //Compile body
+        self.stmt(*stmt.body);
+
+        //Loop back to start
+        self.push_loop(loop_start, loc);
+    }
+
+    fn stmt_while(&mut self, stmt: stmt::While, loc: Location) {
+        let loop_start = self.chunk.count();
+
+        //Compile expression
+        self.expr(*stmt.condition);
+
+        //If false, jump to end
+        let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
+
+        //If true, pop condition result here
+        self.chunk.write(ops::OP_POP, loc.line);
+
+        //Compile body
+        self.stmt(*stmt.body);
+
+        //Loop back to start
+        self.push_loop(loop_start, loc);
+
+        //Patch exit location
+        self.patch_jump(patch_loc, loc);
+
+        //If false, pop condition result here
+        self.chunk.write(ops::OP_POP, loc.line);
+    }
+
+    fn stmt_for(&mut self, stmt: stmt::For, loc: Location, end_loc: Location) {
+        //Push local scope
+        self.locals.push(Vec::new());
+
+        //Compile declaration
+        if let Some(dec) = stmt.declaration {
+            self.stmt(*dec);
+        }
+
+        //Get loop location
+        let loop_start = self.chunk.count();
+
+        //Compile condition
+        let maybe_patch_loc = if let Some(cond) = stmt.condition {
+            self.expr(*cond);
+            let patch_loc = Some(self.push_jump(ops::OP_JUMP_IF_FALSE, loc));
+
+            //If true, pop condition here
+            self.chunk.write(ops::OP_POP, loc.line);
+            patch_loc
+        }
+        else {
+            None
+        };
+
+        //Compile body
+        self.stmt(*stmt.body);
+
+        //Compile action
+        if let Some(act) = stmt.action {
+            self.expr(*act);
+
+            //Pop action value from stack
+            self.chunk.write(ops::OP_POP, loc.line);
+        }
+
+        //Loop back to start
+        self.push_loop(loop_start, loc);
+
+        //Patch exit location
+        if let Some(patch_loc) = maybe_patch_loc {
+            self.patch_jump(patch_loc, loc);
+
+            //If false, pop condition result here
+            self.chunk.write(ops::OP_POP, loc.line);
+        }
+
+        //Pop local scope
+        let len = self.locals.last().unwrap().len();
+
+        if len < u8::MAX as usize {
+            self.chunk.write(ops::OP_POP_N, end_loc.line);
+            self.chunk.write(len as u8, end_loc.line);
+        }
+        else {
+            self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+            self.chunk.write_u16(len as u16, end_loc.line);
+        }
+        
+        self.locals.pop();
+    }
 }

@@ -19,7 +19,7 @@ impl AST {
             .map(|node| node.debug_string(4, Rc::clone(&program)))
             .collect();
 
-        format!("Parse Tree:\n{}", debug_strings.join("\n"))
+        format!("Parse Tree:\n{}", debug_strings.join("\n")).replace("      ", "|     ")
     }
 }
 
@@ -145,7 +145,7 @@ pub mod expression {
                         })
                         .collect();
 
-                    format!("{initial}\n{lhs}\n{}", rhs_strings.join("\n"))
+                    format!("{initial}\n{lhs}\n{}", rhs_strings.join("\n")).replace("      ", "|     ")
                 },
                 ExprNode::Unary(expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -154,7 +154,7 @@ pub mod expression {
                         .collect();
                     let rhs = expr.expr.debug_string(indent + 6, program);
 
-                    format!("{initial}\n{}\n{rhs}", op_strings.join("\n"))
+                    format!("{initial}\n{}\n{rhs}", op_strings.join("\n")).replace("      ", "|     ")
                 },
                 ExprNode::Assignment(expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -162,7 +162,7 @@ pub mod expression {
                     let op = format!("{:indent$}|---- {}", "", expr.assignment_type.token_type().as_program_string(&program), indent = indent + 2);
                     let expr = expr.assignment.debug_string(indent + 6, program);
 
-                    format!("{initial}\n{id}\n{op}\n{expr}")
+                    format!("{initial}\n{id}\n{op}\n{expr}").replace("      ", "|     ")
                 },
                 ExprNode::Literal(expr, _) => {
                     expr.value.debug_string(indent)
@@ -173,11 +173,12 @@ pub mod expression {
                         .map(|segment| segment.debug_string(indent + 6, Rc::clone(&program)))
                         .collect();
 
-                    format!("{initial}\n{}", segment_strings.join("\n"))
+                    format!("{initial}\n{}", segment_strings.join("\n")).replace("      ", "|     ")
                 },
                 ExprNode::Identifier(expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
                     format!("{initial}\n{:indent$}|---- {}", "", expr.id.token_type().as_program_string(&program), indent = indent + 2)
+                        .replace("      ", "|     ")
                 },
                 ExprNode::Function(_expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -198,7 +199,7 @@ pub mod expression {
                         })
                         .collect();
 
-                    format!("{initial}\n{callable_str}\n{}", args_strings.join("\n"))
+                    format!("{initial}\n{callable_str}\n{}", args_strings.join("\n")).replace("      ", "|     ")
                 },
             }
         }
@@ -332,7 +333,7 @@ pub mod statement {
                         .map(|stmt| stmt.debug_string(indent + 6, Rc::clone(&program)))
                         .collect();
 
-                    format!("{initial}\n{}", stmts_strings.join("\n"))
+                    format!("{initial}\n{}", stmts_strings.join("\n")).replace("      ", "|     ")
                 },
                 StmtNode::Conditional(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -347,7 +348,7 @@ pub mod statement {
                             let condition = branch.condition.debug_string(indent + 12, Rc::clone(&program));
                             let body = branch.body.debug_string(indent + 12, Rc::clone(&program));
 
-                            format!("{initial}\n{condition}\n{body}")
+                            format!("{initial}\n{condition}\n{body}").replace("      ", "|     ")
                         })
                         .collect();
 
@@ -357,7 +358,7 @@ pub mod statement {
                         let initial = format!("{:indent$}|---- {}", "", "Else", indent = indent + 2);
                         let else_string = else_block.debug_string(indent + 12, program);
 
-                        format!("{conditional_string}\n{initial}\n{else_string}")
+                        format!("{conditional_string}\n{initial}\n{else_string}").replace("      ", "|     ")
                     }
                     else {
                         conditional_string
@@ -378,28 +379,56 @@ pub mod statement {
                     }
                     else {
                         format!("{initial}\n{id}")
-                    }
+                    }.replace("      ", "|     ")
                 },
                 StmtNode::Expression(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
                     let expr = stmt.expression.debug_string(indent + 6, program);
                     
-                    format!("{initial}\n{expr}")
+                    format!("{initial}\n{expr}").replace("      ", "|     ")
                 },
-                StmtNode::For(_stmt, _, _) => {
+                StmtNode::For(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
 
-                    initial
+                    let declaration = if let Some(dec) = &stmt.declaration {
+                        dec.debug_string(indent + 6, Rc::clone(&program))
+                    }
+                    else {
+                        format!("{:indent$}|---- ()", "", indent = indent + 2)
+                    };
+
+                    let condition = if let Some(cond) = &stmt.condition {
+                        cond.debug_string(indent + 6, Rc::clone(&program))
+                    }
+                    else {
+                        format!("{:indent$}|---- ()", "", indent = indent + 2)
+                    };
+
+                    let action = if let Some(act) = &stmt.action {
+                        act.debug_string(indent + 6, Rc::clone(&program))
+                    }
+                    else {
+                        format!("{:indent$}|---- ()", "", indent = indent + 2)
+                    };
+
+                    let body = stmt.body.debug_string(indent + 6, Rc::clone(&program));
+
+                    format!("{initial}\n{declaration}\n{condition}\n{action}\n{body}").replace("      ", "|     ")
                 },
-                StmtNode::While(_stmt, _, _) => {
+                StmtNode::While(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
 
-                    initial
+                    let expr = stmt.condition.debug_string(indent + 6, Rc::clone(&program));
+                    let body = stmt.body.debug_string(indent + 6, Rc::clone(&program));
+
+                    format!("{initial}\n{expr}\n{body}").replace("      ", "|     ")
                 },
-                StmtNode::Loop(_stmt, _, _) => {
+                StmtNode::Loop(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
 
-                    initial
+                    let body = stmt.body.debug_string(indent + 6, Rc::clone(&program));
+
+                    format!("{initial}\n{body}").replace("      ", "|     ")
                 },
                 StmtNode::Return(stmt, _, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -407,7 +436,7 @@ pub mod statement {
                     if let Some(expr) = &stmt.expression {
                         let expr_string = expr.debug_string(indent + 4, program);
 
-                        format!("{initial}\n{expr_string}")
+                        format!("{initial}\n{expr_string}").replace("      ", "|     ")
                     }
                     else {
                          initial
@@ -417,7 +446,7 @@ pub mod statement {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
                     let expr = stmt.expression.debug_string(indent + 6, program);
                     
-                    format!("{initial}\n{expr}")
+                    format!("{initial}\n{expr}").replace("      ", "|     ")
                 },
             }
         }
@@ -466,7 +495,7 @@ pub mod statement {
 
     #[derive(Debug)]
     pub struct While {
-        pub condition: Option<Box<ExprNode>>, 
+        pub condition: Box<ExprNode>, 
         pub body: Box<StmtNode>
     }
 
