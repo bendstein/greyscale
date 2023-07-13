@@ -260,9 +260,8 @@ impl VirtualMachine {
             Op::SetLocal => {
                 if let Some(n) = self.move_next() {
                     //Assign the value at the top of the stack to the local at the given index
-                    let index = self.stack.len().saturating_sub(n as usize + 2);
                     let top = self.peek_value().unwrap();
-                    self.stack[index] = top.clone();
+                    self.stack[n as usize] = top.clone();
                 }
                 else {
                     return Err(self.make_error("Expected the index of the local.".to_string()));
@@ -274,9 +273,8 @@ impl VirtualMachine {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
                         //Assign the value at the top of the stack to the local at the given index
-                        let index = self.stack.len().saturating_sub(n as usize + 2);
                         let top = self.peek_value().unwrap();
-                        self.stack[index] = top.clone();
+                        self.stack[n as usize] = top.clone();
                     }
                     else {
                         return Err(self.make_error("Expected the 16-bit index of the local.".to_string()));

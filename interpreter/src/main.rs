@@ -1,4 +1,4 @@
-use std::{fs::File, io::{Read, stdin}, time::{Duration, Instant}, rc::Rc};
+use std::{fs::File, io::Read, time::{Duration, Instant}, rc::Rc};
 
 use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler};
 use unicode_segmentation::UnicodeSegmentation;
@@ -104,8 +104,7 @@ fn main() -> Result<(), String> {
     }
 }
 
-fn vm_step_through(mut vm: VirtualMachine, manual: bool) -> Result<(), GreyscaleError> {
-    
+fn vm_step_through(mut vm: VirtualMachine, manual: bool) -> Result<(), GreyscaleError> { 
     while !vm.is_at_end() {
         write_vm_state(&vm);
 

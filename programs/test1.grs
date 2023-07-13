@@ -1,3 +1,5 @@
-for let i = 0; i < 2; i += 1 {
-    print i;
+for let i = 0; i < 5; i += 1 {
+    for let j = 0; j < i; j += 1 {
+        print `{i} + {j} = {i + j}`;
+    }
 }

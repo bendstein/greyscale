@@ -13,15 +13,10 @@ use greyscale::vm::error::GreyscaleError;
 
 fn main() {
     let program: &str = "
-    /*
     for let i = 0; i < 5; i += 1 {
         for let j = 0; j < i; j += 1 {
             print `{i} + {j} = {i + j}`;
         }
-    }
-    */
-    for let i = 0; i < 2; i += 1 {
-        print i;
     }
     ";
 

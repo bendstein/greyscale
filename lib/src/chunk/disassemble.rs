@@ -1,10 +1,6 @@
-use std::fmt::{Display};
-
 use crate::ops::Op;
 
 use super::Chunk;
-
-type Result = std::result::Result<usize, std::fmt::Error>;
 
 impl Chunk {
 
@@ -184,7 +180,7 @@ impl Chunk {
     fn write_value(&self, n: usize, s: &mut String) {
 
         if n >= self.constants.count() {
-            s.push_str(&format!("<undefined>"));
+            s.push_str("<undefined>");
         }
         else {
             s.push_str(&format!("{}", self.constants[n]));
