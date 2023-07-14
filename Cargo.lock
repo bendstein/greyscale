@@ -12,6 +12,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "compiler"
+version = "0.0.1"
+dependencies = [
+ "greyscale",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "greyscale"
 version = "0.0.1"
 dependencies = [

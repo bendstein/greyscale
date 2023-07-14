@@ -82,6 +82,69 @@ impl Chunk {
         self.name = name;
         self
     }
+
+    pub fn encode_as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        //Encode metadata
+        let metadata_bytes = self.metadata.encode_as_bytes();
+
+        //Encode constants
+        let constants_bytes = self.constants.encode_as_bytes();
+
+        //Write metadata length, followed by metadata
+        bytes.extend((metadata_bytes.len() as u64).to_be_bytes());
+        bytes.extend(metadata_bytes);
+
+        //Write constants length, followed by constants
+        bytes.extend((constants_bytes.len() as u64).to_be_bytes());
+        bytes.extend(constants_bytes);
+
+        //Write code length, followed by code
+        bytes.extend((self.code.len() as u64).to_be_bytes());
+        bytes.extend(self.code.clone());
+
+        bytes
+    }
+
+    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+        let mut offset = 0;
+
+        //Get metadata length
+        let metadata_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
+
+        offset = 8;
+
+        //Get metadata
+        let metadata = Metadata::decode_from_bytes(&bytes[offset..metadata_len + offset]);
+
+        offset += metadata_len;
+
+        //Get constants length
+        let constants_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
+
+        offset += 8;
+
+        //Get constants
+        let constants = Values::decode_from_bytes(&bytes[offset..constants_len + offset]);
+    
+        offset += constants_len;
+
+        //Get code length
+        let code_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
+
+        offset += 8;
+
+        //Get code
+        let code = Vec::from(&bytes[offset..code_len + offset]);
+
+        Self {
+            code,
+            name: None,
+            constants,
+            metadata
+        }
+    }
 }
 
 impl<Idx> Index<Idx> for Chunk

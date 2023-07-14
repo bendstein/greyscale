@@ -72,4 +72,44 @@ impl Metadata {
     pub fn line_count(&self) -> usize {
         self.newlines.len()
     }
+
+    pub fn encode_as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        //Push new line data
+        for line in &self.newlines {
+            bytes.extend((line.0 as u64).to_be_bytes());
+            bytes.extend((line.1 as u64).to_be_bytes());
+        }
+
+        //Prepend with newline bytes length
+        let bytes_temp = bytes;
+        let mut bytes = Vec::from((self.newlines.len() as u64 * 16_u64).to_be_bytes());
+        bytes.extend(bytes_temp);
+
+        bytes
+    }
+
+    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+        let mut newlines: Vec<(usize, usize)> = Vec::new();
+
+        //Get newline data length
+        let lines_count = u64::from_be_bytes(bytes[0..8].try_into().unwrap_or_default()) as usize;
+
+        let mut offset = 8;
+
+        while offset + 8 <= lines_count {
+            let a = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
+            offset += 8;
+
+            let b = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
+            offset += 8;
+
+            newlines.push((a, b));
+        }
+
+        Self {
+            newlines
+        }
+    }
 }

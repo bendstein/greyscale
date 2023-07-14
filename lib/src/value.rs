@@ -120,6 +120,105 @@ impl Value {
 
         panic!("Not a string object!")
     }
+
+    pub fn encode_as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        match self {
+            Value::Null => {
+                //Push discriminant
+                bytes.push(0_u8);
+            },
+            Value::Void => {
+                //Push discriminant
+                bytes.push(1_u8);
+            },
+            Value::Bool(b) => {
+                //Push discriminant
+                bytes.push(2_u8);
+
+                //Push value
+                if *b {
+                    bytes.push(0_u8);
+                }
+                else {
+                    bytes.push(1_u8);
+                }
+            },
+            Value::Int(i) => {
+                //Push discriminant
+                bytes.push(3_u8);  
+
+                //Push value
+                bytes.extend(i.to_be_bytes());
+            },
+            Value::Double(d) => {
+                //Push discriminant
+                bytes.push(4_u8);    
+
+                //Push value
+                bytes.extend(d.to_be_bytes());
+            },
+            Value::Object(o) => {
+                //Push discriminant
+                bytes.push(5_u8);
+
+                //Push Value
+                bytes.extend(o.encode_as_bytes());
+            },
+        }
+
+        bytes
+    }
+
+    pub fn decode_from_bytes(bytes: &[u8]) -> (Self, usize) {
+        //Use first byte as discriminator
+        let discriminator = bytes[0];
+
+        match discriminator {
+            //Null
+            0 => {
+                (Self::Null, 1)
+            },
+            //Void
+            1 => {
+                (Self::Void, 1)
+            },
+            //Bool
+            2 => {
+                //Read next byte to get boolean value
+                let value = bytes[1];
+
+                if value == 0 {
+                    (Self::Bool(false), 2)
+                }
+                else {
+                    (Self::Bool(true), 2)
+                }
+            },
+            //Int
+            3 => {
+                //Read next 8 bytes to get i64 value
+                let value = i64::from_be_bytes(bytes[1..9].try_into().unwrap_or_default());
+                (Self::Int(value), 9)
+            },
+            //Double
+            4 => {
+                //Read next 8 bytes to get f64 value
+                let value = f64::from_be_bytes(bytes[1..9].try_into().unwrap_or_default());
+                (Self::Double(value), 9)
+            },
+            //Object
+            5 => {
+                //Read object from bytes
+                let (obj, len) = Object::decode_from_bytes(&bytes[1..]);
+                (Self::Object(Rc::new(obj)), len + 1)
+            },
+            _ => {
+                panic!("Invalid value discriminator {discriminator}.")
+            }
+        }
+    }
 }
 
 #[derive(Default, Debug, PartialEq, PartialOrd)]
@@ -154,6 +253,27 @@ impl Values {
             .enumerate()
             .find(|(_, el)| &value == el)
             .map(|(ndx, _)| ndx)
+    }
+
+    pub fn encode_as_bytes(&self) -> Vec<u8> {
+        self.values.iter()
+            .flat_map(|v| v.encode_as_bytes())
+            .collect()
+    }
+
+    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+        let mut values: Vec<Value> = Vec::new();
+        let mut offset: usize = 0;
+
+        while offset < bytes.len() {
+            let (val, len) = Value::decode_from_bytes(&bytes[offset..]);
+            offset += len;
+            values.push(val);
+        }
+
+        Self {
+            values
+        }
     }
 }
 

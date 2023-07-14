@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, time::{Duration, Instant}, rc::Rc};
 
-use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler};
+use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk};
 use unicode_segmentation::UnicodeSegmentation;
 
 fn main() -> Result<(), String> {
@@ -26,45 +26,57 @@ fn main() -> Result<(), String> {
     let mut file = File::open(&args[0])
         .map_err(handle_io_err)?;
 
-    let mut program: String = String::new();
-    let _ = file.read_to_string(&mut program)
-        .map_err(handle_io_err)?;
+    let mut compiled = if filepath.to_uppercase().ends_with(".BIN") {
+        let mut bytes: Vec<u8> = Vec::new();
 
-    if (constants::TRACE & constants::TRACE_OUTPUT_INPUT) == constants::TRACE_OUTPUT_INPUT {
-        println!("Program: {program}");
+        let _ = file.read_to_end(&mut bytes)
+            .map_err(handle_io_err)?;
+
+        Chunk::decode_from_bytes(&bytes)
     }
+    else {
+        let mut program: String = String::new();
+        let _ = file.read_to_string(&mut program)
+            .map_err(handle_io_err)?;
 
-    let compile_start = Instant::now();
-
-    let graphemes = program.graphemes(true).collect::<Vec<&str>>();
-    let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
+        if (constants::TRACE & constants::TRACE_OUTPUT_INPUT) == constants::TRACE_OUTPUT_INPUT {
+            println!("Program: {program}");
+        }
     
-    let parse_result = Parser::parse_with_settings(Rc::clone(&rc_graphemes), ParserSettings {
-        allow_implicit_final_semicolon: true
-    });
+        let compile_start = Instant::now();
+    
+        let graphemes = program.graphemes(true).collect::<Vec<&str>>();
+        let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
+        
+        let parse_result = Parser::parse_with_settings(Rc::clone(&rc_graphemes), ParserSettings {
+            allow_implicit_final_semicolon: true
+        });
+    
+        if let Err(parse_err) = &parse_result {
+            return Err(handle_err(parse_err.clone()));
+        }
+    
+        let parsed = parse_result.unwrap();
+    
+        if (constants::TRACE & constants::TRACE_OUTPUT_PARSE_TREE) == constants::TRACE_OUTPUT_PARSE_TREE {
+            let formatted_parsed = parsed.debug_string(Rc::clone(&rc_graphemes));
+            println!("{formatted_parsed}");
+        }
+    
+        let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
+    
+        if let Err(compile_err) = &compile_result {
+            return Err(handle_err(compile_err.clone()));
+        }
+    
+        let compiled = compile_result.unwrap();
+    
+        if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
+            println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
+        }
 
-    if let Err(parse_err) = &parse_result {
-        return Err(handle_err(parse_err.clone()));
-    }
-
-    let parsed = parse_result.unwrap();
-
-    if (constants::TRACE & constants::TRACE_OUTPUT_PARSE_TREE) == constants::TRACE_OUTPUT_PARSE_TREE {
-        let formatted_parsed = parsed.debug_string(Rc::clone(&rc_graphemes));
-        println!("{formatted_parsed}");
-    }
-
-    let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
-
-    if let Err(compile_err) = &compile_result {
-        return Err(handle_err(compile_err.clone()));
-    }
-
-    let mut compiled = compile_result.unwrap();
-
-    if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
-        println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
-    }
+        compiled
+    };
 
     if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
         compiled.name = Some(String::from("Trace"));

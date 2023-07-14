@@ -2,6 +2,7 @@
 members = [
     "lib",
     "interpreter",
+    "compiler",
     "repl",
     "greyscaletest"
 ]
