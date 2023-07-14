@@ -139,10 +139,10 @@ impl Value {
 
                 //Push value
                 if *b {
-                    bytes.push(0_u8);
+                    bytes.push(1_u8);
                 }
                 else {
-                    bytes.push(1_u8);
+                    bytes.push(0_u8);
                 }
             },
             Value::Int(i) => {
