@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -201,6 +201,11 @@ impl<'a> Parser<'a> {
         //Try match expression statement
         if let Some(expr_stmt) = self.expression_statement()? {
             return Ok(Some(expr_stmt));
+        }
+
+        //Try match keyword statement
+        if let Some(kwd_stmt) = self.keyword_statement()? {
+            return Ok(Some(kwd_stmt));
         }
 
         Ok(None)
@@ -1429,6 +1434,37 @@ impl<'a> Parser<'a>  {
         }
 
         //Not a for statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn keyword_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: Keyword Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match keyword print
+        if let Some(token) = self.lexer.current_token() {
+            let kwd_token = token?;
+            let token_type = kwd_token.token_type();
+
+            if matches!(token_type, TokenType::Break | TokenType::Continue) {
+                //Advance lexer
+                self.lexer.advance();
+
+                //Match semicolon, allowing implicit if enabled
+                self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+
+                return Ok(Some(StmtNode::Keyword(Keyword {
+                    keyword: kwd_token
+                }, self.location_at_position(start_position),
+                self.location_at_position(self.lexer.current_position()))));
+            }
+        }
+
+        //Not an expression statement
         self.lexer.set_position(start_position);
         Ok(None)
     }

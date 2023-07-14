@@ -61,6 +61,8 @@ pub enum TokenType {
 
     Print,
 
+    Continue, Break,
+
     #[default]
     Return
 }
@@ -142,6 +144,8 @@ impl TokenType {
             TokenType::Let => symbols::LET.to_string(),
             TokenType::Func => symbols::FUNC.to_string(),
             TokenType::Print => symbols::PRINT.to_string(),
+            TokenType::Continue => symbols::CONTINUE.to_string(),
+            TokenType::Break => symbols::BREAK.to_string(),
             TokenType::Return => symbols::RETURN.to_string(),
         }
     }

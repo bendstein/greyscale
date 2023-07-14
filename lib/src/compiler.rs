@@ -20,13 +20,33 @@ use chunk::Chunk;
 use value::Value;
 use crate::location::Location;
 
+/**
+ * Types of structures that can be affected by return/break/continue/etc
+ */
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub enum ControllableType {
+    #[default]
+    Loop,
+    Function,
+    Switch
+}
+
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct Controllable {
+    pub ctype: ControllableType,
+    pub depth: usize,
+    pub patch_start: usize,
+    pub patch_end: usize
+}
+
 #[allow(dead_code)]
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
     chunk: Chunk,
     constants: Values,
-    locals: Vec<Vec<String>>
+    locals: Vec<Vec<String>>,
+    controllables: Vec<Controllable>
 }
 
 impl<'a> Compiler<'a> {
@@ -36,7 +56,8 @@ impl<'a> Compiler<'a> {
             errors: Vec::new(),
             chunk: Chunk::default(),
             constants: Values::default(),
-            locals: Vec::new()
+            locals: Vec::new(),
+            controllables: Vec::new()
         };
 
         for statement in ast.statements {
@@ -60,7 +81,8 @@ impl<'a> Compiler<'a> {
             errors: Vec::new(),
             chunk: Chunk::default(),
             constants: Values::default(),
-            locals: Vec::new()
+            locals: Vec::new(),
+            controllables: Vec::new()
         };
 
         compiler.expr(expression);
@@ -110,8 +132,8 @@ impl<'a> Compiler<'a> {
             StmtNode::Conditional(conditional, loc, _) => {
                 self.stmt_conditional(conditional, loc);
             },
-            StmtNode::Keyword(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Keyword statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Keyword(stmt, loc, _) => {
+                self.stmt_keyword(stmt, loc);
             },
             StmtNode::Declaration(declaration, loc, _) => {
                 self.stmt_declaration(declaration, loc);
@@ -234,6 +256,7 @@ impl<'a> Compiler<'a> {
 
         None
     }
+
 }
 
 //Expressions
@@ -512,6 +535,8 @@ impl<'a> Compiler<'a> {
 //Statements
 impl<'a> Compiler<'a> {
     fn stmt_block(&mut self, block: stmt::Block, end_loc: Location) {
+        let initial_scope_depth = self.locals.len();
+
         //Push local scope
         self.locals.push(Vec::new());
 
@@ -520,19 +545,21 @@ impl<'a> Compiler<'a> {
             self.stmt(stmt);
         }
 
-        //Pop local scope
-        let len = self.locals.last().unwrap().len();
+        while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
+            //Pop local scope
+            let len = self.locals.last().unwrap().len();
 
-        if len < u8::MAX as usize {
-            self.chunk.write(ops::OP_POP_N, end_loc.line);
-            self.chunk.write(len as u8, end_loc.line);
+            if len < u8::MAX as usize {
+                self.chunk.write(ops::OP_POP_N, end_loc.line);
+                self.chunk.write(len as u8, end_loc.line);
+            }
+            else {
+                self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+                self.chunk.write_u16(len as u16, end_loc.line);
+            }
+            
+            self.locals.pop();
         }
-        else {
-            self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
-            self.chunk.write_u16(len as u16, end_loc.line);
-        }
-        
-        self.locals.pop();
     }
 
     fn stmt_expression(&mut self, stmt: stmt::Expression, end_loc: Location) {
@@ -627,18 +654,18 @@ impl<'a> Compiler<'a> {
     fn stmt_loop(&mut self, stmt: stmt::Loop, loc: Location) {
         let loop_start = self.chunk.count();
 
-        //Compile body
-        self.stmt(*stmt.body);
+        //Push true as condition, and jump to end if false, to allow support for break statement
+        self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Bool(true), loc);
 
-        //Loop back to start
-        self.push_loop(loop_start, loc);
-    }
+        let after_condition = self.chunk.count();
 
-    fn stmt_while(&mut self, stmt: stmt::While, loc: Location) {
-        let loop_start = self.chunk.count();
-
-        //Compile expression
-        self.expr(*stmt.condition);
+        //Push to stack for break/continue
+        self.controllables.push(Controllable {
+            ctype: ControllableType::Loop,
+            depth: self.locals.len(),
+            patch_start: loop_start,
+            patch_end: after_condition
+        });
 
         //If false, jump to end
         let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
@@ -657,35 +684,75 @@ impl<'a> Compiler<'a> {
 
         //If false, pop condition result here
         self.chunk.write(ops::OP_POP, loc.line);
+
+        //Pop from stack for break/continue
+        self.controllables.pop();
+    }
+
+    fn stmt_while(&mut self, stmt: stmt::While, loc: Location) {
+        let loop_start = self.chunk.count();
+
+        //Compile expression
+        self.expr(*stmt.condition);
+
+        let after_condition = self.chunk.count();
+
+        //Push to stack for break/continue
+        self.controllables.push(Controllable {
+            ctype: ControllableType::Loop,
+            depth: self.locals.len(),
+            patch_start: loop_start,
+            patch_end: after_condition
+        });
+
+        //If false, jump to end
+        let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
+
+        //If true, pop condition result here
+        self.chunk.write(ops::OP_POP, loc.line);
+
+        //Compile body
+        self.stmt(*stmt.body);
+
+        //Loop back to start
+        self.push_loop(loop_start, loc);
+
+        //Patch exit location
+        self.patch_jump(patch_loc, loc);
+
+        //If false, pop condition result here
+        self.chunk.write(ops::OP_POP, loc.line);
+
+        //Pop from stack for break/continue
+        self.controllables.pop();
     }
 
     fn stmt_for(&mut self, stmt: stmt::For, loc: Location, end_loc: Location) {
+        let initial_scope_depth = self.locals.len();
+
         //Push local scope
         self.locals.push(Vec::new());
 
         //Compile declaration
-        if let Some(dec) = stmt.declaration {
+        let maybe_decl_patch = if let Some(dec) = stmt.declaration {
             self.stmt(*dec);
-        }
 
-        //Get loop location
-        let loop_start = self.chunk.count();
-
-        //Compile condition
-        let maybe_patch_loc = if let Some(cond) = stmt.condition {
-            self.expr(*cond);
-            let patch_loc = Some(self.push_jump(ops::OP_JUMP_IF_FALSE, loc));
-
-            //If true, pop condition here
-            self.chunk.write(ops::OP_POP, loc.line);
-            patch_loc
+            if stmt.action.is_some() {
+                //Jump to after action
+                Some(self.push_jump(ops::OP_JUMP, loc))
+            }
+            else {
+                None
+            }
         }
         else {
             None
         };
 
-        //Compile body
-        self.stmt(*stmt.body);
+        //Get loop location
+        let loop_start = self.chunk.count();
+
+        let has_action = stmt.action.is_some();
 
         //Compile action
         if let Some(act) = stmt.action {
@@ -695,29 +762,129 @@ impl<'a> Compiler<'a> {
             self.chunk.write(ops::OP_POP, loc.line);
         }
 
+        //Jump here after declaration to prevent execution of action before first time
+        if let Some(decl_patch) = maybe_decl_patch {
+            if has_action {
+                self.patch_jump(decl_patch, loc);
+            }
+        }
+
+        //Compile condition
+        if let Some(cond) = stmt.condition {
+            self.expr(*cond);
+        }
+        else {
+            //If no condition, push true as condition to allow for breaking w/o patching locations
+            self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Bool(true), loc);
+        }
+
+        let after_condition = self.chunk.count();
+
+        //Push to stack for break/continue
+        self.controllables.push(Controllable {
+            ctype: ControllableType::Loop,
+            depth: self.locals.len(),
+            patch_start: loop_start,
+            patch_end: after_condition
+        });
+
+        let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
+
+        //If true, pop condition here
+        self.chunk.write(ops::OP_POP, loc.line);
+
+        //Compile body
+        self.stmt(*stmt.body);
+
         //Loop back to start
         self.push_loop(loop_start, loc);
 
         //Patch exit location
-        if let Some(patch_loc) = maybe_patch_loc {
-            self.patch_jump(patch_loc, loc);
+        self.patch_jump(patch_loc, loc);
 
-            //If false, pop condition result here
-            self.chunk.write(ops::OP_POP, loc.line);
-        }
+        //If false, pop condition result here
+        self.chunk.write(ops::OP_POP, loc.line);
 
-        //Pop local scope
-        let len = self.locals.last().unwrap().len();
+        //Pop from stack for break/continue
+        self.controllables.pop();
 
-        if len < u8::MAX as usize {
-            self.chunk.write(ops::OP_POP_N, end_loc.line);
-            self.chunk.write(len as u8, end_loc.line);
+        while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
+            //Pop local scope
+            let len = self.locals.last().unwrap().len();
+
+            if len < u8::MAX as usize {
+                self.chunk.write(ops::OP_POP_N, end_loc.line);
+                self.chunk.write(len as u8, end_loc.line);
+            }
+            else {
+                self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+                self.chunk.write_u16(len as u16, end_loc.line);
+            }
+            
+            self.locals.pop();
         }
-        else {
-            self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
-            self.chunk.write_u16(len as u16, end_loc.line);
+    }
+
+    fn stmt_keyword(&mut self, stmt: stmt::Keyword, loc: Location) {
+        let token_type = stmt.keyword.token_type();
+
+        match token_type {
+            TokenType::Continue | TokenType::Break => {
+                let mut found: Option<Controllable> = None;
+
+                for i in (0..self.controllables.len()).rev() {
+                    let ctrl_top = self.controllables[i];
+
+                    match ctrl_top.ctype {
+                        ControllableType::Loop => {
+                            found = Some(ctrl_top);
+                            break;
+                        },
+                        ControllableType::Function => {
+                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
+                        },
+                        ControllableType::Switch => {
+                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
+                        }
+                    }
+                }
+
+                if found.is_none() {
+                    self.errors.push(GreyscaleError::CompileErr(format!("Token {} is not valid here.", token_type.as_string()), loc));
+                    return;
+                }
+
+                let found = found.unwrap();
+
+                //On continue or break, pop local scope
+                while !self.locals.is_empty() && self.locals.len() > found.depth {
+                    let len = self.locals.last().unwrap().len();
+
+                    if len < u8::MAX as usize {
+                        self.chunk.write(ops::OP_POP_N, loc.line);
+                        self.chunk.write(len as u8, loc.line);
+                    }
+                    else {
+                        self.chunk.write(ops::OP_POP_N_LONG, loc.line);
+                        self.chunk.write_u16(len as u16, loc.line);
+                    }
+                    
+                    self.locals.pop();
+                }
+
+                //On continue, jump to before condition
+                if let TokenType::Continue = token_type {
+                    self.push_loop(found.patch_start, loc);
+                }
+                //On break, push false to stack and jump to after condition
+                else {
+                    self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Bool(false), loc);
+                    self.push_loop(found.patch_end, loc);
+                }
+            },
+            _ => {
+                self.errors.push(GreyscaleError::CompileErr("Invalid keyword token.".to_string(), loc));
+            }
         }
-        
-        self.locals.pop();
     }
 }

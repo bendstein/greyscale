@@ -63,3 +63,5 @@ pub const FUNC: &str = "func";
 pub const PRINT: &str = "print";
 
 pub const RETURN: &str = "return";
+pub const CONTINUE: &str = "continue";
+pub const BREAK: &str = "break";

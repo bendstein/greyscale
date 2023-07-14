@@ -662,6 +662,8 @@ impl<'a> Lexer<'a> {
             symbols::LET => Some(TokenType::Let),
             symbols::FUNC => Some(TokenType::Func),
             symbols::PRINT => Some(TokenType::Print),
+            symbols::CONTINUE => Some(TokenType::Continue),
+            symbols::BREAK => Some(TokenType::Break),
             symbols::RETURN => Some(TokenType::Return),
             _ => None
         }
