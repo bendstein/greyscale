@@ -1,4 +1,4 @@
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub struct Metadata {
     newlines: Vec<(usize, usize)>
 }

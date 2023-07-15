@@ -221,7 +221,7 @@ impl Value {
     }
 }
 
-#[derive(Default, Debug, PartialEq, PartialOrd)]
+#[derive(Default, Debug, PartialEq, PartialOrd, Clone)]
 pub struct Values {
     values: Vec<Value>,
 }

@@ -3,7 +3,7 @@ pub mod disassemble;
 use std::{slice::SliceIndex, ops::{Index, IndexMut}, fmt::Display};
 use crate::{value::{Values, Value}, metadata::Metadata};
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq, PartialOrd, Clone)]
 pub struct Chunk {
     pub name: Option<String>,
     code: Vec<u8>,

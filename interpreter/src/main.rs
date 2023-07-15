@@ -75,7 +75,7 @@ fn main() -> Result<(), String> {
             println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
         }
 
-        compiled
+        compiled.chunk
     };
 
     if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
@@ -83,7 +83,8 @@ fn main() -> Result<(), String> {
         println!("{compiled}");
     }
 
-    let mut vm = VirtualMachine::new(compiled);
+    let mut vm = VirtualMachine::new(compiled)
+        .map_err(handle_err)?;
 
     fn handle_err(err: GreyscaleError) -> String {
         match err {
@@ -118,7 +119,7 @@ fn main() -> Result<(), String> {
 
 fn vm_step_through(mut vm: VirtualMachine, manual: bool) -> Result<(), GreyscaleError> { 
     while !vm.is_at_end() {
-        write_vm_state(&vm);
+        write_vm_state(&vm)?;
 
         if manual {
             let mut temp = String::new();
@@ -134,12 +135,12 @@ fn vm_step_through(mut vm: VirtualMachine, manual: bool) -> Result<(), Greyscale
     Ok(())
 }
 
-fn write_vm_state(vm: &VirtualMachine) {
+fn write_vm_state(vm: &VirtualMachine) -> Result<(), GreyscaleError> {
     print!("\x1B[2J\x1B[1;1H");
-    let ip = vm.current_ip();
+    let ip = vm.ip();
 
     println!("=============================================");
-    let chunk = vm.chunk();
+    let chunk = vm.chunk()?;
 
     let mut offset = 0_usize;
 
@@ -162,4 +163,5 @@ fn write_vm_state(vm: &VirtualMachine) {
 
     println!("Stack: {}", vm.get_stack_trace());
 
+    Ok(())
 }

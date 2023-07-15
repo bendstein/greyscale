@@ -1,40 +1,53 @@
 use std::{rc::Rc, collections::HashMap};
 
-use crate::{chunk::Chunk, ops::Op, value::{Value, object::Object}, constants, location::Location};
+use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType}}, constants, location::Location};
 
-use self::{error::GreyscaleError, settings::VMSettings};
+use self::{error::GreyscaleError, settings::VMSettings, frame::CallFrame};
 
 pub mod error;
 pub mod settings;
+pub mod frame;
 
 type GreyscaleResult = std::result::Result<(), GreyscaleError>;
 
 #[derive(Default, Debug)]
 pub struct VirtualMachine {
-    chunk: Chunk,
-    ip: usize,
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
-    settings: VMSettings
+    frames: Vec<CallFrame>,
+    settings: VMSettings,
 }
 
 impl VirtualMachine {
-    pub fn new(chunk: Chunk) -> Self {
+    pub fn new(chunk: Chunk) -> Result<Self, GreyscaleError> {
         Self::new_with_settings(chunk, VMSettings::default())
     }
 
-    pub fn new_with_settings(chunk: Chunk, settings: VMSettings) -> Self {
-        Self {
+    pub fn new_with_settings(chunk: Chunk, settings: VMSettings) -> Result<Self, GreyscaleError> {
+        let function = Function {
+            arity: 0,
             chunk,
-            ip: 0,
+            func_type: FunctionType::TopLevel
+        };
+
+        let mut s = Self {
             stack: Vec::new(),
             globals: HashMap::new(),
+            frames: vec![ CallFrame {
+                function: function.clone(),
+                ip: 0,
+                stack_offset: 0
+            }],
             settings
-        }
+        };
+
+        s.push_value(Value::Object(Rc::new(Object::Function(function))))?;
+
+        Ok(s)
     }
 
     pub fn execute(&mut self) -> GreyscaleResult {    
-        while let Some(opcode) = self.move_next() {
+        while let Some(opcode) = self.move_next()? {
             self.exec_one(opcode)?;
         }
 
@@ -42,7 +55,7 @@ impl VirtualMachine {
     }
 
     pub fn step(&mut self) -> GreyscaleResult {
-        if let Some(opcode) = self.move_next() {
+        if let Some(opcode) = self.move_next()? {
             self.exec_one(opcode)?;
         }
 
@@ -58,7 +71,7 @@ impl VirtualMachine {
             //Declarations And Variables ------------------------------------------------------------
             //Constants
             Op::Constant => {
-                if let Some(addr) = self.move_next() {
+                if let Some(addr) = self.move_next()? {
                     let value = self.read_const(addr as usize)?.clone();
                     self.push_value(value)?;
                 }
@@ -67,8 +80,8 @@ impl VirtualMachine {
                 }
             },
             Op::ConstantLong => {
-                if let Some(addr1) = self.move_next() {
-                    if let Some(addr2) = self.move_next() {
+                if let Some(addr1) = self.move_next()? {
+                    if let Some(addr2) = self.move_next()? {
                         let addr = (addr2 as u16) + ((addr1 as u16) << 8);
                         let value = self.read_const(addr as usize)?.clone();
                         self.push_value(value)?;
@@ -83,7 +96,7 @@ impl VirtualMachine {
             },
             //Globals
             Op::DefineGlobal => {
-                if let Some(addr) = self.move_next() {
+                if let Some(addr) = self.move_next()? {
                     let value = self.read_const(addr as usize)?.clone();
                     
                     if !value.is_object_string() {
@@ -102,8 +115,8 @@ impl VirtualMachine {
                 }
             },
             Op::DefineGlobalLong => {
-                if let Some(addr1) = self.move_next() {
-                    if let Some(addr2) = self.move_next() {
+                if let Some(addr1) = self.move_next()? {
+                    if let Some(addr2) = self.move_next()? {
                         let addr = (addr2 as u16) + ((addr1 as u16) << 8);
                         let value = self.read_const(addr as usize)?.clone();
                         
@@ -127,7 +140,7 @@ impl VirtualMachine {
                 }
             },
             Op::GetGlobal => {
-                if let Some(addr) = self.move_next() {
+                if let Some(addr) = self.move_next()? {
                     let value = self.read_const(addr as usize)?.clone();
                     
                     if !value.is_object_string() {
@@ -148,8 +161,8 @@ impl VirtualMachine {
                 }
             },
             Op::GetGlobalLong => {
-                if let Some(addr1) = self.move_next() {
-                    if let Some(addr2) = self.move_next() {
+                if let Some(addr1) = self.move_next()? {
+                    if let Some(addr2) = self.move_next()? {
                         let addr = (addr2 as u16) + ((addr1 as u16) << 8);
                         let value = self.read_const(addr as usize)?.clone();
                         
@@ -175,7 +188,7 @@ impl VirtualMachine {
                 }
             },
             Op::SetGlobal => {
-                if let Some(addr) = self.move_next() {
+                if let Some(addr) = self.move_next()? {
                     let value = self.read_const(addr as usize)?.clone();
                     
                     if !value.is_object_string() {
@@ -200,8 +213,8 @@ impl VirtualMachine {
                 }
             },
             Op::SetGlobalLong => {
-                if let Some(addr1) = self.move_next() {
-                    if let Some(addr2) = self.move_next() {
+                if let Some(addr1) = self.move_next()? {
+                    if let Some(addr2) = self.move_next()? {
                         let addr = (addr2 as u16) + ((addr1 as u16) << 8);
                         let value = self.read_const(addr as usize)?.clone();
                         
@@ -231,9 +244,11 @@ impl VirtualMachine {
             },
             //Locals
             Op::GetLocal => {
-                if let Some(n) = self.move_next() {
+                if let Some(n) = self.move_next()? {
+                    let offset = self.current_frame_offset();
+
                     //Push the value at location n of the stack to the stack
-                    let value = &self.stack[n as usize];
+                    let value = &self.stack[offset + n as usize];
                     self.push_value(value.clone())?;
                 }
                 else {
@@ -241,12 +256,14 @@ impl VirtualMachine {
                 }
             },
             Op::GetLocalLong => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
+                        let offset = self.current_frame_offset();
+
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
                         //Push the value at location n of the stack to the stack
-                        let value = &self.stack[n as usize];
+                        let value = &self.stack[offset + n as usize];
                         self.push_value(value.clone())?;
                     }
                     else {
@@ -258,23 +275,27 @@ impl VirtualMachine {
                 }
             },
             Op::SetLocal => {
-                if let Some(n) = self.move_next() {
+                if let Some(n) = self.move_next()? {
+                    let offset = self.current_frame_offset();
+
                     //Assign the value at the top of the stack to the local at the given index
                     let top = self.peek_value().unwrap();
-                    self.stack[n as usize] = top.clone();
+                    self.stack[offset + n as usize] = top.clone();
                 }
                 else {
                     return Err(self.make_error("Expected the index of the local.".to_string()));
                 }
             },
             Op::SetLocalLong => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
+                        let offset = self.current_frame_offset();
+
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
                         //Assign the value at the top of the stack to the local at the given index
                         let top = self.peek_value().unwrap();
-                        self.stack[n as usize] = top.clone();
+                        self.stack[offset + n as usize] = top.clone();
                     }
                     else {
                         return Err(self.make_error("Expected the 16-bit index of the local.".to_string()));
@@ -313,7 +334,7 @@ impl VirtualMachine {
                 }
             },
             Op::PopN => {
-                if let Some(n) = self.move_next() {
+                if let Some(n) = self.move_next()? {
                     self.pop_n_value(n as usize);
                 }
                 else {
@@ -321,8 +342,8 @@ impl VirtualMachine {
                 }
             },
             Op::PopNLong => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         self.pop_n_value(n as usize);
                     }
@@ -335,11 +356,10 @@ impl VirtualMachine {
                 }
             },
             Op::Jump => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
-                        
-                        self.ip = self.ip.saturating_add(n as usize);
+                        self.advance_ip(n as isize);
                     }
                     else {
                         return Err(self.make_error("Expected a 16-bit argument for Jump.".to_string()));
@@ -350,8 +370,8 @@ impl VirtualMachine {
                 }
             },
             Op::JumpIfFalse => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
                         let top = self.peek_value();
@@ -364,7 +384,7 @@ impl VirtualMachine {
                         };
 
                         if should_jump {
-                            self.ip = self.ip.saturating_add(n as usize);
+                            self.advance_ip(n as isize);
                         }
                     }
                     else {
@@ -376,8 +396,8 @@ impl VirtualMachine {
                 }
             },
             Op::JumpIfTrue => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
                         let top = self.peek_value();
@@ -390,7 +410,7 @@ impl VirtualMachine {
                         };
 
                         if should_jump {
-                            self.ip = self.ip.saturating_add(n as usize);
+                            self.advance_ip(n as isize);
                         }
                     }
                     else {
@@ -402,11 +422,11 @@ impl VirtualMachine {
                 }
             },
             Op::Loop => {
-                if let Some(n0) = self.move_next() {
-                    if let Some(n1) = self.move_next() {
+                if let Some(n0) = self.move_next()? {
+                    if let Some(n1) = self.move_next()? {
                         let n = (n1 as u16) + ((n0 as u16) << 8);
                         
-                        self.ip = self.ip.saturating_sub(n as usize);
+                        self.advance_ip(-(n as i32) as isize);
                     }
                     else {
                         return Err(self.make_error("Expected a 16-bit argument for Jump.".to_string()));
@@ -466,13 +486,14 @@ impl VirtualMachine {
         Ok(())
     }
 
-    fn move_next(&mut self) -> Option<u8> {
+    fn move_next(&mut self) -> Result<Option<u8>, GreyscaleError> {
         if self.is_at_end() {
-            None
+            Ok(None)
         }
         else {
-            self.ip += 1;
-            Some(self.chunk[self.ip - 1])
+            let current_ip = self.ip() as u8;
+            self.advance_ip(1);
+            Ok(Some(self.chunk()?[current_ip as usize]))
         }
     }
 
@@ -481,7 +502,7 @@ impl VirtualMachine {
     }
 
     fn read_const(&self, n: usize) -> Result<&Value, GreyscaleError> {
-        if let Some(constant) = self.chunk.try_get_const(n) {
+        if let Some(constant) = self.chunk()?.try_get_const(n) {
             Ok(constant)
         }
         else {
@@ -950,11 +971,28 @@ impl VirtualMachine {
     }
 
     pub fn is_at_end(&self) -> bool {
-        self.ip >= self.chunk.count()
+        if let Ok(c) = self.chunk() {
+            self.ip() >= c.count()
+        }
+        else {
+            true
+        }
     }
 
     fn get_line(&self) -> usize {
-        self.chunk.metadata.get_line(self.ip)
+        if let Ok(c) = self.chunk() {
+            c.metadata.get_line(self.ip())
+        }
+        else {
+            0
+        }
+    }
+
+    fn current_frame_offset(&self) -> usize {
+        match self.frames.last() {
+            Some(f) => f.stack_offset,
+            None => 0_usize
+        }
     }
 
     fn make_error(&self, message: String) -> GreyscaleError {
@@ -970,11 +1008,19 @@ impl VirtualMachine {
 
     fn trace(&self) {
         if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
-            let mut s = String::new();
-            let _ = &self.chunk.disassemble_instr(self.ip - 1, &mut s);
-            print!("\nINSTR: {}", s);
-            print!("STACK: ");
-            self.stack_trace();
+            let chunk = self.chunk();
+            
+            if let Ok(c) = chunk {
+
+                let mut s = String::new();
+                let _ = c.disassemble_instr(self.ip() - 1, &mut s);
+                print!("\nINSTR: {}", s);
+                print!("STACK: ");
+                self.stack_trace();
+            }
+            else {
+                eprintln!("No stack frame present.");
+            }
         }
     }
 
@@ -994,11 +1040,27 @@ impl VirtualMachine {
         s
     }
 
-    pub fn chunk(&self) -> &Chunk {
-        &self.chunk
+    pub fn chunk(&self) -> Result<&Chunk, GreyscaleError> {
+        match self.frames.last() {
+            None => Err(self.make_error("No stack frame present.".to_string())),
+            Some(f) => Ok(&f.function.chunk)
+        }
     }
 
-    pub fn current_ip(&self) -> usize {
-        self.ip
+    pub fn ip(&self) -> usize {
+        match self.frames.last() {
+            None => 0_usize,
+            Some(f) => f.ip
+        }
     }
+
+    fn advance_ip(&mut self, n: isize) {
+        match self.frames.last_mut() {
+            None => {},
+            Some(f) => {
+                f.ip = f.ip.saturating_add_signed(n);
+            }
+        }
+    }
+
 }

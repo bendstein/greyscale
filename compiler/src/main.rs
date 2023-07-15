@@ -60,7 +60,7 @@ fn main() -> Result<(), String> {
         return Err(handle_err(compile_err.clone()));
     }
 
-    let mut compiled = compile_result.unwrap();
+    let mut compiled = compile_result.unwrap().chunk;
 
     if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
         println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());

@@ -52,7 +52,7 @@ fn main() {
         return;
     }
 
-    let mut compiled = compile_result.unwrap();
+    let mut compiled = compile_result.unwrap().chunk;
 
     if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
         println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
@@ -65,9 +65,16 @@ fn main() {
 
     let exec_start = Instant::now();
 
-    let mut vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
+    let vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
         ignore_final_pop: false
     });
+
+    if let Err(error) = vm {
+        handle_err(&error);
+        return;
+    }
+
+    let mut vm = vm.unwrap();
 
     let execute_result = vm.execute();
 

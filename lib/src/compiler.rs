@@ -1,9 +1,9 @@
 use std::rc::Rc;
 
 use crate::parser::ast;
-use crate::chunk;
 use crate::token::token_type::TokenType;
 use crate::value::Values;
+use crate::value::object::Function;
 use crate::value::object::Object;
 use crate::vm::error;
 use crate::ops;
@@ -16,7 +16,6 @@ use ast::AST;
 use expr::ExprNode;
 use stmt::StmtNode;
 use error::GreyscaleError;
-use chunk::Chunk;
 use value::Value;
 use crate::location::Location;
 
@@ -28,7 +27,8 @@ pub enum ControllableType {
     #[default]
     Loop,
     Function,
-    Switch
+    Switch,
+    Catch
 }
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -43,22 +43,25 @@ pub struct Controllable {
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
-    chunk: Chunk,
+    target: Function,
     constants: Values,
     locals: Vec<Vec<String>>,
     controllables: Vec<Controllable>
 }
 
 impl<'a> Compiler<'a> {
-    pub fn compile_ast(program: Rc<Vec<&'a str>>, ast: AST) -> Result<Chunk, GreyscaleError> {
+    pub fn compile_ast(program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
         let mut compiler = Self {
             program: Rc::clone(&program),
             errors: Vec::new(),
-            chunk: Chunk::default(),
+            target: Function::default(),
             constants: Values::default(),
             locals: Vec::new(),
             controllables: Vec::new()
         };
+
+        //Claim locals slot 0 for internal use
+        compiler.locals.push(vec![String::new()]);
 
         for statement in ast.statements {
             match statement {
@@ -68,27 +71,30 @@ impl<'a> Compiler<'a> {
         }
 
         if compiler.errors.is_empty() {
-            Ok(compiler.chunk)
+            Ok(compiler.target)
         }
         else {
             Err(GreyscaleError::AggregateErr(compiler.errors))
         }
     }
 
-    pub fn compile_expression(program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Chunk, GreyscaleError> {
+    pub fn compile_expression(program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Function, GreyscaleError> {
         let mut compiler = Self {
             program: Rc::clone(&program),
             errors: Vec::new(),
-            chunk: Chunk::default(),
+            target: Function::default(),
             constants: Values::default(),
             locals: Vec::new(),
             controllables: Vec::new()
         };
+        
+        //Claim locals slot 0 for internal use
+        compiler.locals.push(vec![String::new()]);
 
         compiler.expr(expression);
 
         if compiler.errors.is_empty() {
-            Ok(compiler.chunk)
+            Ok(compiler.target)
         }
         else {
             Err(GreyscaleError::AggregateErr(compiler.errors))
@@ -165,9 +171,9 @@ impl<'a> Compiler<'a> {
             i
         }
         //Otherwise, if there is space for a new constant, add it to the chunk, and the compiler's collection of constants
-        else if self.chunk.count_consts() < u16::MAX as usize  {
+        else if self.target.chunk.count_consts() < u16::MAX as usize  {
             self.constants.write(value.clone());
-            self.chunk.add_const(value)
+            self.target.chunk.add_const(value)
         }
         //Otherwise, out of range
         else {
@@ -175,12 +181,12 @@ impl<'a> Compiler<'a> {
         };
 
         if index < u8::MAX as usize {
-            self.chunk.write(code, location.line);
-            self.chunk.write(index as u8, location.line);
+            self.target.chunk.write(code, location.line);
+            self.target.chunk.write(index as u8, location.line);
         }
         else if index < u16::MAX as usize {
-            self.chunk.write(code_long, location.line);
-            self.chunk.write_u16(index as u16, location.line);
+            self.target.chunk.write(code_long, location.line);
+            self.target.chunk.write_u16(index as u16, location.line);
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} constants.", u16::MAX), location));
@@ -191,12 +197,12 @@ impl<'a> Compiler<'a> {
 
     fn push_local(&mut self, code: u8, code_long: u8, slot: usize, location: Location) {
         if slot < u8::MAX as usize {
-            self.chunk.write(code, location.line);
-            self.chunk.write(slot as u8, location.line);
+            self.target.chunk.write(code, location.line);
+            self.target.chunk.write(slot as u8, location.line);
         }
         else if slot < u16::MAX as usize {
-            self.chunk.write(code_long, location.line);
-            self.chunk.write_u16(slot as u16, location.line);
+            self.target.chunk.write(code_long, location.line);
+            self.target.chunk.write_u16(slot as u16, location.line);
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot exceed {} locals.", u16::MAX), location));
@@ -204,18 +210,18 @@ impl<'a> Compiler<'a> {
     }
 
     fn push_jump(&mut self, code: u8, location: Location) -> usize {
-        self.chunk.write(code, location.line);
+        self.target.chunk.write(code, location.line);
         //Get the address we're going to write the offset to so we can patch it later
-        let count = self.chunk.count();
-        self.chunk.write_u16(u16::MAX, location.line);
+        let count = self.target.chunk.count();
+        self.target.chunk.write_u16(u16::MAX, location.line);
         count
     }
 
     fn patch_jump(&mut self, offset: usize, location: Location) {
-        let jump_to = self.chunk.count().saturating_sub(offset + 2);
+        let jump_to = self.target.chunk.count().saturating_sub(offset + 2);
 
         if jump_to <= u16::MAX as usize {
-            self.chunk.patch_u16(offset, jump_to as u16);
+            self.target.chunk.patch_u16(offset, jump_to as u16);
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot jump over {} lines.", u16::MAX), location));
@@ -223,12 +229,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn push_loop(&mut self, loop_start: usize, location: Location) {
-        self.chunk.write(ops::OP_LOOP, location.line);
+        self.target.chunk.write(ops::OP_LOOP, location.line);
 
-        let offset = (self.chunk.count() + 2).saturating_sub(loop_start);
+        let offset = (self.target.chunk.count() + 2).saturating_sub(loop_start);
 
         if offset <= u16::MAX as usize {
-            self.chunk.write_u16(offset as u16, location.line);
+            self.target.chunk.write_u16(offset as u16, location.line);
         }
         else {
             self.errors.push(GreyscaleError::CompileErr(format!("Cannot jump over {} lines.", u16::MAX), location));
@@ -298,9 +304,9 @@ impl<'a> Compiler<'a> {
         for op_token in expr.ops {
             let token_type = op_token.token_type();
             match token_type {
-                TokenType::Minus => self.chunk.write(ops::OP_NEGATE, location.line),
-                TokenType::Tilde => self.chunk.write(ops::OP_BITWISE_NOT, location.line),
-                TokenType::Bang => self.chunk.write(ops::OP_LOGICAL_NOT, location.line),
+                TokenType::Minus => self.target.chunk.write(ops::OP_NEGATE, location.line),
+                TokenType::Tilde => self.target.chunk.write(ops::OP_BITWISE_NOT, location.line),
+                TokenType::Bang => self.target.chunk.write(ops::OP_LOGICAL_NOT, location.line),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid unary operator '{}'.", 
                         token_type.as_string()), location));
@@ -334,23 +340,23 @@ impl<'a> Compiler<'a> {
             match token_type {
                 TokenType::PipePipe => {}, //Short circuiting ops already handled
                 TokenType::AmpAmp => {},
-                TokenType::Plus => self.chunk.write(ops::OP_ADD, location.line),
-                TokenType::Minus => self.chunk.write(ops::OP_SUBTRACT, location.line),
-                TokenType::Star => self.chunk.write(ops::OP_MULTIPLY, location.line),
-                TokenType::Slash => self.chunk.write(ops::OP_DIVIDE, location.line),
-                TokenType::Percent => self.chunk.write(ops::OP_MODULUS, location.line),
-                TokenType::CaretCaret => self.chunk.write(ops::OP_LOGICAL_XOR, location.line),
-                TokenType::Pipe => self.chunk.write(ops::OP_BITWISE_OR, location.line),
-                TokenType::Caret => self.chunk.write(ops::OP_BITWISE_XOR, location.line),
-                TokenType::Amp => self.chunk.write(ops::OP_BITWISE_AND, location.line),
-                TokenType::LessLess => self.chunk.write(ops::OP_BITWISE_LSHIFT, location.line),
-                TokenType::GreaterGreater => self.chunk.write(ops::OP_BITWISE_RSHIFT, location.line),
-                TokenType::EqualEqual => self.chunk.write(ops::OP_EQUAL, location.line),
-                TokenType::BangEqual => self.chunk.write(ops::OP_NOT_EQUAL, location.line),
-                TokenType::Greater => self.chunk.write(ops::OP_GREATER, location.line),
-                TokenType::GreaterEqual => self.chunk.write(ops::OP_GREATER_EQUAL, location.line),
-                TokenType::Less => self.chunk.write(ops::OP_LESS, location.line),
-                TokenType::LessEqual => self.chunk.write(ops::OP_LESS_EQUAL, location.line),
+                TokenType::Plus => self.target.chunk.write(ops::OP_ADD, location.line),
+                TokenType::Minus => self.target.chunk.write(ops::OP_SUBTRACT, location.line),
+                TokenType::Star => self.target.chunk.write(ops::OP_MULTIPLY, location.line),
+                TokenType::Slash => self.target.chunk.write(ops::OP_DIVIDE, location.line),
+                TokenType::Percent => self.target.chunk.write(ops::OP_MODULUS, location.line),
+                TokenType::CaretCaret => self.target.chunk.write(ops::OP_LOGICAL_XOR, location.line),
+                TokenType::Pipe => self.target.chunk.write(ops::OP_BITWISE_OR, location.line),
+                TokenType::Caret => self.target.chunk.write(ops::OP_BITWISE_XOR, location.line),
+                TokenType::Amp => self.target.chunk.write(ops::OP_BITWISE_AND, location.line),
+                TokenType::LessLess => self.target.chunk.write(ops::OP_BITWISE_LSHIFT, location.line),
+                TokenType::GreaterGreater => self.target.chunk.write(ops::OP_BITWISE_RSHIFT, location.line),
+                TokenType::EqualEqual => self.target.chunk.write(ops::OP_EQUAL, location.line),
+                TokenType::BangEqual => self.target.chunk.write(ops::OP_NOT_EQUAL, location.line),
+                TokenType::Greater => self.target.chunk.write(ops::OP_GREATER, location.line),
+                TokenType::GreaterEqual => self.target.chunk.write(ops::OP_GREATER_EQUAL, location.line),
+                TokenType::Less => self.target.chunk.write(ops::OP_LESS, location.line),
+                TokenType::LessEqual => self.target.chunk.write(ops::OP_LESS_EQUAL, location.line),
                 _ => {
                     self.errors.push(GreyscaleError::CompileErr(format!("Invalid binary operator '{}'.", 
                         token_type.as_string()), location));
@@ -363,7 +369,7 @@ impl<'a> Compiler<'a> {
         let short_circuit_loc = self.push_jump(short_circuit_op, location);
 
         //If didn't short circuit, pop value from stack so next part can be evaluated
-        self.chunk.write(ops::OP_POP, location.line);
+        self.target.chunk.write(ops::OP_POP, location.line);
 
         //Return patch location
         short_circuit_loc
@@ -391,7 +397,7 @@ impl<'a> Compiler<'a> {
                     first = false;
                 }
                 else {
-                    self.chunk.write(ops::OP_CONCAT, segment_location.line);
+                    self.target.chunk.write(ops::OP_CONCAT, segment_location.line);
                 }
             }
         }
@@ -482,7 +488,7 @@ impl<'a> Compiler<'a> {
             self.expr(*expr.assignment);
 
             //Push infix op
-            self.chunk.write(infix_op, location.line);
+            self.target.chunk.write(infix_op, location.line);
         }
         //Handle short circuting operators
         else if matches!(assignment_token_type, TokenType::AmpAmpEqual | TokenType::PipePipeEqual) {
@@ -550,12 +556,12 @@ impl<'a> Compiler<'a> {
             let len = self.locals.last().unwrap().len();
 
             if len < u8::MAX as usize {
-                self.chunk.write(ops::OP_POP_N, end_loc.line);
-                self.chunk.write(len as u8, end_loc.line);
+                self.target.chunk.write(ops::OP_POP_N, end_loc.line);
+                self.target.chunk.write(len as u8, end_loc.line);
             }
             else {
-                self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
-                self.chunk.write_u16(len as u16, end_loc.line);
+                self.target.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+                self.target.chunk.write_u16(len as u16, end_loc.line);
             }
             
             self.locals.pop();
@@ -567,7 +573,7 @@ impl<'a> Compiler<'a> {
         self.expr(*stmt.expression);
 
         //Push pop
-        self.chunk.write(ops::OP_POP, end_loc.line);
+        self.target.chunk.write(ops::OP_POP, end_loc.line);
     }
 
     fn stmt_print(&mut self, stmt: stmt::Print, loc: Location) {
@@ -575,7 +581,7 @@ impl<'a> Compiler<'a> {
         self.expr(*stmt.expression);
 
         //Push print
-        self.chunk.write(ops::OP_PRINT, loc.line);
+        self.target.chunk.write(ops::OP_PRINT, loc.line);
     }
 
     fn stmt_declaration(&mut self, stmt: stmt::Declaration, loc: Location) {
@@ -625,7 +631,7 @@ impl<'a> Compiler<'a> {
             let patch_location = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
 
             //If true, pop condition
-            self.chunk.write(ops::OP_POP, loc.line);
+            self.target.chunk.write(ops::OP_POP, loc.line);
 
             //Compile statement
             self.stmt(branch.body);
@@ -637,7 +643,7 @@ impl<'a> Compiler<'a> {
             self.patch_jump(patch_location, loc);
 
             //If false, pop condition here
-            self.chunk.write(ops::OP_POP, loc.line);
+            self.target.chunk.write(ops::OP_POP, loc.line);
         }
 
         if let Some(else_block) = stmt.branch_else {
@@ -652,12 +658,12 @@ impl<'a> Compiler<'a> {
     }
 
     fn stmt_loop(&mut self, stmt: stmt::Loop, loc: Location) {
-        let loop_start = self.chunk.count();
+        let loop_start = self.target.chunk.count();
 
         //Push true as condition, and jump to end if false, to allow support for break statement
         self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Bool(true), loc);
 
-        let after_condition = self.chunk.count();
+        let after_condition = self.target.chunk.count();
 
         //Push to stack for break/continue
         self.controllables.push(Controllable {
@@ -671,7 +677,7 @@ impl<'a> Compiler<'a> {
         let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
 
         //If true, pop condition result here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Compile body
         self.stmt(*stmt.body);
@@ -683,19 +689,19 @@ impl<'a> Compiler<'a> {
         self.patch_jump(patch_loc, loc);
 
         //If false, pop condition result here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Pop from stack for break/continue
         self.controllables.pop();
     }
 
     fn stmt_while(&mut self, stmt: stmt::While, loc: Location) {
-        let loop_start = self.chunk.count();
+        let loop_start = self.target.chunk.count();
 
         //Compile expression
         self.expr(*stmt.condition);
 
-        let after_condition = self.chunk.count();
+        let after_condition = self.target.chunk.count();
 
         //Push to stack for break/continue
         self.controllables.push(Controllable {
@@ -709,7 +715,7 @@ impl<'a> Compiler<'a> {
         let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
 
         //If true, pop condition result here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Compile body
         self.stmt(*stmt.body);
@@ -721,7 +727,7 @@ impl<'a> Compiler<'a> {
         self.patch_jump(patch_loc, loc);
 
         //If false, pop condition result here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Pop from stack for break/continue
         self.controllables.pop();
@@ -750,7 +756,7 @@ impl<'a> Compiler<'a> {
         };
 
         //Get loop location
-        let loop_start = self.chunk.count();
+        let loop_start = self.target.chunk.count();
 
         let has_action = stmt.action.is_some();
 
@@ -759,7 +765,7 @@ impl<'a> Compiler<'a> {
             self.expr(*act);
 
             //Pop action value from stack
-            self.chunk.write(ops::OP_POP, loc.line);
+            self.target.chunk.write(ops::OP_POP, loc.line);
         }
 
         //Jump here after declaration to prevent execution of action before first time
@@ -778,7 +784,7 @@ impl<'a> Compiler<'a> {
             self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, Value::Bool(true), loc);
         }
 
-        let after_condition = self.chunk.count();
+        let after_condition = self.target.chunk.count();
 
         //Push to stack for break/continue
         self.controllables.push(Controllable {
@@ -791,7 +797,7 @@ impl<'a> Compiler<'a> {
         let patch_loc = self.push_jump(ops::OP_JUMP_IF_FALSE, loc);
 
         //If true, pop condition here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Compile body
         self.stmt(*stmt.body);
@@ -803,7 +809,7 @@ impl<'a> Compiler<'a> {
         self.patch_jump(patch_loc, loc);
 
         //If false, pop condition result here
-        self.chunk.write(ops::OP_POP, loc.line);
+        self.target.chunk.write(ops::OP_POP, loc.line);
 
         //Pop from stack for break/continue
         self.controllables.pop();
@@ -813,12 +819,12 @@ impl<'a> Compiler<'a> {
             let len = self.locals.last().unwrap().len();
 
             if len < u8::MAX as usize {
-                self.chunk.write(ops::OP_POP_N, end_loc.line);
-                self.chunk.write(len as u8, end_loc.line);
+                self.target.chunk.write(ops::OP_POP_N, end_loc.line);
+                self.target.chunk.write(len as u8, end_loc.line);
             }
             else {
-                self.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
-                self.chunk.write_u16(len as u16, end_loc.line);
+                self.target.chunk.write(ops::OP_POP_N_LONG, end_loc.line);
+                self.target.chunk.write_u16(len as u16, end_loc.line);
             }
             
             self.locals.pop();
@@ -845,6 +851,9 @@ impl<'a> Compiler<'a> {
                         },
                         ControllableType::Switch => {
                             self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
+                        },
+                        ControllableType::Catch => {
+                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
                         }
                     }
                 }
@@ -861,12 +870,12 @@ impl<'a> Compiler<'a> {
                     let len = self.locals.last().unwrap().len();
 
                     if len < u8::MAX as usize {
-                        self.chunk.write(ops::OP_POP_N, loc.line);
-                        self.chunk.write(len as u8, loc.line);
+                        self.target.chunk.write(ops::OP_POP_N, loc.line);
+                        self.target.chunk.write(len as u8, loc.line);
                     }
                     else {
-                        self.chunk.write(ops::OP_POP_N_LONG, loc.line);
-                        self.chunk.write_u16(len as u16, loc.line);
+                        self.target.chunk.write(ops::OP_POP_N_LONG, loc.line);
+                        self.target.chunk.write_u16(len as u16, loc.line);
                     }
                     
                     self.locals.pop();
