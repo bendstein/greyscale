@@ -180,10 +180,22 @@ pub mod expression {
                     format!("{initial}\n{:indent$}|---- {}", "", expr.id.token_type().as_program_string(&program), indent = indent + 2)
                         .replace("      ", "|     ")
                 },
-                ExprNode::Function(_expr, _) => {
+                ExprNode::Function(expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
+                    let params_strings: Vec<String> = expr.args.iter()
+                        .map(|token| format!("{:indent$}|---- {}", "", token.token_type().as_program_string(&program), indent = indent + 8))
+                        .collect();
 
-                    initial
+                    let body_string = match &expr.body {
+                        FunctionType::Block(b) => b.debug_string(indent + 12, Rc::clone(&program)),
+                        FunctionType::Inline(i) => i.debug_string(indent + 12, Rc::clone(&program)),
+                    };
+
+                    format!("{initial}\n{:indent$}|---- Parameters{}\n{:indent$}|---- Body\n{body_string}", "", if expr.args.is_empty() {
+                        "".to_string()
+                    } else {
+                        format!("\n{}", params_strings.join("\n"))
+                    }, "", indent = indent + 2).replace("      ", "|     ")
                 },
                 ExprNode::Call(expr, _) => {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
@@ -248,7 +260,41 @@ pub mod expression {
     #[derive(Debug)]
     pub struct Function {
         pub args: Vec<Token>, 
-        pub body: Box<statement::StmtNode>
+        pub body: FunctionType
+    }
+
+    #[derive(Debug)]
+    pub enum FunctionType {
+        Block(Box<statement::StmtNode>),
+        Inline(Box<ExprNode>)
+    }
+
+    impl FunctionType {
+        pub fn is_block(&self) -> bool {
+            matches!(self, FunctionType::Block(_))
+        }
+
+        pub fn unwrap_block(&self) -> &statement::StmtNode {
+            if let FunctionType::Block(b) = self {
+                b
+            }
+            else {
+                panic!("Not a block function!")
+            }
+        }
+
+        pub fn is_inline(&self) -> bool {
+            matches!(self, FunctionType::Inline(_))
+        }
+
+        pub fn unwrap_inline(&self) -> &ExprNode {
+            if let FunctionType::Inline(i) = self {
+                i
+            }
+            else {
+                panic!("Not an inline function!")
+            }
+        }
     }
 
     #[derive(Debug)]

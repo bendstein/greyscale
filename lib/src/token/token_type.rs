@@ -15,7 +15,7 @@ pub enum TokenType {
 
     //One or more character tokens
     Bang, BangEqual,
-    Equal, EqualEqual,
+    Equal, EqualEqual, EqualGreater,
 
     Plus, PlusEqual,
     Minus, MinusEqual,
@@ -87,6 +87,7 @@ impl TokenType {
             TokenType::BangEqual => format!("{}{}", symbols::BANG, symbols::EQUAL),
             TokenType::Equal => symbols::EQUAL.to_string(),
             TokenType::EqualEqual => format!("{}{}", symbols::EQUAL, symbols::EQUAL),
+            TokenType::EqualGreater => format!("{}{}", symbols::EQUAL, symbols::GREATER),
             TokenType::Plus => symbols::PLUS.to_string(),
             TokenType::PlusEqual => format!("{}{}", symbols::PLUS, symbols::EQUAL),
             TokenType::Minus => symbols::MINUS.to_string(),

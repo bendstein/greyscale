@@ -124,6 +124,9 @@ impl<'a> Lexer<'a> {
                 if self.match_symbol(symbols::EQUAL) {
                     return Some(Ok(self.make_token(TokenType::EqualEqual)));
                 }
+                else if self.match_symbol(symbols::GREATER) {
+                    return Some(Ok(self.make_token(TokenType::EqualGreater)));
+                }
                 
                 Some(Ok(self.make_token(TokenType::Equal)))
             },

@@ -1,19 +1,7 @@
-for let i = 0; i < 10; i += 1 {
-    for let j = 0; j < i; j += 1 {
-
-        if j == 2 {
-            print 'Continue';
-            continue;
-        }
-
-        if j == 8 {
-            print 'Break';
-            break;
-        }
-
-        print `{i} + {j} = {i + j}`;
-    }
-
-    print '
-    ';
+func x(i, j) => 5;
+func x(i) => {
+    print 5;
+}
+func x() {
+    print 6;
 }

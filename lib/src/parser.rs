@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, Function, FunctionType}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -161,6 +161,11 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
         if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
             println!("Parser: Statement");
+        }
+
+        //Try match function declaration statement
+        if let Some(func_decl_stmt) = self.function_declaration_statement()? {
+            return Ok(Some(func_decl_stmt));
         }
 
         //Try match loop statement
@@ -606,41 +611,153 @@ impl<'a> Parser<'a> {
 
     fn func(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
         if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
-            println!("Parser: Fucntion Expression");
+            println!("Parser: Function Expression");
         }
 
-        let maybe_func = self.func_inline()?;
+        let start_position = self.lexer.current_position();
 
-        if let Some(func) = maybe_func {
-            return Ok(Some(func));
+        //Match opening lparen
+        if let Some(token) = self.lexer.current_token() {
+            let lparen_token = token?;
+            let lparen_token_type = lparen_token.token_type();
+
+            if let TokenType::LParen = lparen_token_type {
+                //Advance lexer
+                self.lexer.advance();
+                
+                //Match function arguments
+                let mut args: Vec<Token> = Vec::new();
+
+                while let Some(token) = self.lexer.current_token() {
+                    let loop_position = self.lexer.current_position();
+
+                    let id_token = token?;
+                    let id_token_type = id_token.token_type();
+
+                    if let TokenType::Identifier(_) = id_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+
+                        //Add param, match comma
+                        args.push(id_token);
+
+                        if let Some(token) = self.lexer.current_token() {
+                            let comma_token = token?;
+                            let comma_token_type = comma_token.token_type();
+
+                            if let TokenType::Comma = comma_token_type {
+                                //Advance lexer and continue to next arg
+                                self.lexer.advance();
+                                continue;
+                            }
+                        }
+                        
+                        //End of arguments, break
+                        break;
+                    }
+                    else if let TokenType::RParen = id_token_type {
+                        if args.is_empty() {
+                            //No arguments, break
+                            break;
+                        }
+                        else {
+                            return Err(self.make_error("Expected a function parameter.".to_string(), loop_position));
+                        }
+                    }
+                    else if !args.is_empty() {
+                        //Invalid token in call signature
+                        return Err(self.make_error(format!("Invalid token '{}' in function call signature.", id_token_type.as_string()), loop_position));
+                    }
+                    else {
+                        //Not a function call signature, move to next highest priority
+                        self.lexer.set_position(start_position);
+                        return self.primary();
+                    }
+                }
+
+                let args_end_position = self.lexer.current_position();
+
+                //Match closing rparen
+                if let Some(token) = self.lexer.current_token() {
+                    let rparen_token = token?;
+                    let rparen_token_type = rparen_token.token_type();
+
+                    if let TokenType::RParen = rparen_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+
+                        let mut is_arrow = false;
+                        let mut after_args_position = self.lexer.current_position();
+
+                        //Match optional fat arrow
+                        if let Some(token) = self.lexer.current_token() {
+                            let arrow_token = token?;
+                            let arrow_token_type = arrow_token.token_type();
+
+                            if let TokenType::EqualGreater = arrow_token_type {
+                                //Advance lexer
+                                self.lexer.advance();
+                                is_arrow = true;
+                                after_args_position = self.lexer.current_position();
+                            }
+                        }
+
+                        //If next token is {, match a block
+                        if let Some(token) = self.lexer.current_token() {
+                            let lbrace_token = token?;
+                            let lbrace_token_type = lbrace_token.token_type();
+
+                            if let TokenType::LBrace = lbrace_token_type {
+                                //Match a block
+                                if let Some(block) = self.block_statement()? {
+                                    return Ok(Some(ExprNode::Function(Function {
+                                        args,
+                                        body: FunctionType::Block(Box::new(block))
+                                    }, self.location_at_position(self.lexer.current_position()))))
+                                }
+                                else {
+                                    return Err(self.make_error("Expected a function body.".to_string(), after_args_position));
+                                }
+                            }
+                            else if is_arrow {
+                                //Lambda doesn't require block, match an expression
+                                if let Some(expr) = self.expression()? {
+                                    return Ok(Some(ExprNode::Function(Function {
+                                        args,
+                                        body: FunctionType::Inline(Box::new(expr))
+                                    }, self.location_at_position(self.lexer.current_position()))))
+                                }
+                                else {
+                                    return Err(self.make_error("Expected an expression or function body.".to_string(), after_args_position));
+                                }
+                            }
+                            else if args.len() < 2 {
+                                //Might not be a function call signature
+                            }
+                            else {
+                                return Err(self.make_error("Expected '{' or '=>' before function body.".to_string(), after_args_position));
+                            }
+                        }
+                        else if args.len() < 2 {
+                            //Might not be a function call signature
+                        }
+                        else {
+                            return Err(self.make_error("Unexpected end of input.".to_string(), after_args_position));
+                        }
+                    }
+                    else if args.len() < 2 {
+                        //Might not be a function call signature
+                    }
+                    else {
+                        return Err(self.make_error("Expected ')' after function parameters.".to_string(), args_end_position));
+                    }
+                }
+            }
         }
 
-        let maybe_func = self.func_block()?;
-
-        if let Some(func) = maybe_func {
-            return Ok(Some(func))
-        }
-
-        //Roll down to next priority
+        //Not a function, check next highest priority
+        self.lexer.set_position(start_position);
         self.primary()
-    }
-
-    fn func_inline(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
-            println!("Parser: Lambda Expression");
-        }
-
-        //TODO
-        Ok(None)
-    }
-
-    fn func_block(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
-        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
-            println!("Parser: Function Block Expression");
-        }
-
-        //TODO
-        Ok(None)
     }
 
     fn primary(&mut self) -> Result<Option<ExprNode>, GreyscaleError> {
@@ -1102,6 +1219,67 @@ impl<'a> Parser<'a>  {
         }
 
         //Not a block statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
+    fn function_declaration_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: Function Declaration Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match keyword func
+        if let Some(token) = self.lexer.current_token() {
+            let func_token = token?;
+            let func_token_type = func_token.token_type();
+
+            if let TokenType::Func = func_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                let id_start = self.lexer.current_position();
+
+                //Match identifier
+                if let Some(token) = self.lexer.current_token() {
+                    let id_token = token?;
+                    let id_token_type = id_token.token_type();
+        
+                    if let TokenType::Identifier(_) = id_token_type {
+                        //Advance lexer
+                        self.lexer.advance();
+
+                        //Match a function expression
+                        if let Some(ExprNode::Function(f, f_loc)) = self.func()? {
+                            //For an inline function, require a semicolon
+                            if f.body.is_inline() {
+                                //Match semicolon, allowing implicit if enabled
+                                self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+                            }
+                            
+                            //Return declaration statement
+                            return Ok(Some(StmtNode::Declaration(Declaration {
+                                id: id_token,
+                                assignment: Some(Box::new(ExprNode::Function(f, f_loc)))
+                            }, f_loc,
+                            self.location_at_position(self.lexer.current_position()))));
+                        }
+                        else {
+                            return Err(self.make_error("Expected a function.".to_string(), id_start));
+                        }
+                    }
+                    else {
+                        return Err(self.make_error("Expected an identifier.".to_string(), id_start));
+                    }
+                }
+                else {
+                        return Err(self.make_error("Expected an identifier.".to_string(), id_start));
+                }
+            }
+        }
+
+        //Not a function declaration statement
         self.lexer.set_position(start_position);
         Ok(None)
     }
