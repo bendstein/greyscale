@@ -70,7 +70,10 @@ impl Metadata {
     }
 
     pub fn line_count(&self) -> usize {
-        self.newlines.len()
+        *self.newlines.iter()
+            .map(|(_, n)| n)
+            .max()
+            .unwrap_or(&0)
     }
 
     pub fn encode_as_bytes(&self) -> Vec<u8> {

@@ -23,7 +23,6 @@ pub enum Op {
     //Keywords -----------------------
     #[default]
     Return,
-    Print,
     //Internal
     Pop,
     PopN,
@@ -132,15 +131,14 @@ pub const OP_SET_LOCAL_LONG: u8 = 11;
 
 //Keywords ---------------------------
 pub const OP_RETURN: u8         = 30;
-pub const OP_PRINT: u8          = 31;
 //Internal
-pub const OP_POP: u8            = 32;
-pub const OP_POP_N: u8          = 33;
-pub const OP_POP_N_LONG: u8     = 34;
-pub const OP_JUMP: u8           = 35;
-pub const OP_JUMP_IF_FALSE: u8  = 36;
-pub const OP_JUMP_IF_TRUE: u8   = 37;
-pub const OP_LOOP: u8           = 38;
+pub const OP_POP: u8            = 31;
+pub const OP_POP_N: u8          = 32;
+pub const OP_POP_N_LONG: u8     = 33;
+pub const OP_JUMP: u8           = 34;
+pub const OP_JUMP_IF_FALSE: u8  = 35;
+pub const OP_JUMP_IF_TRUE: u8   = 36;
+pub const OP_LOOP: u8           = 37;
 
 
 //Unary operators --------------------
@@ -203,7 +201,6 @@ lazy_static! {
 
         //Keywords -----------------------------
         (OP_RETURN, Op::Return),
-        (OP_PRINT, Op::Print),
         //Internal
         (OP_POP, Op::Pop),
         (OP_POP_N, Op::PopN),
@@ -273,7 +270,6 @@ lazy_static! {
 
         //Keywords -----------------------------
         (Op::Return, "OP_RETURN"),
-        (Op::Print, "OP_PRINT"),
         //Internal
         (Op::Pop, "OP_POP"),
         (Op::PopN, "OP_POP_N"),

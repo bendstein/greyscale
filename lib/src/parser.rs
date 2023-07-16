@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, Function, FunctionType}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword, Return}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, Function, FunctionType}, LiteralType, statement::{Expression, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword, Return}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -193,11 +193,6 @@ impl<'a> Parser<'a> {
             return Ok(Some(block_stmt));
         }
 
-        //Try match print statement
-        if let Some(print_stmt) = self.print_statement()? {
-            return Ok(Some(print_stmt));
-        }
-
         //Try match declaration statement
         if let Some(decl_stmt) = self.declaration_statement()? {
             return Ok(Some(decl_stmt));
@@ -296,7 +291,7 @@ impl<'a> Parser<'a> {
     
                             //If next token is sync token, stop and continue parsing
                             if matches!(next_token_type, TokenType::Class | TokenType::Func | TokenType::Let | TokenType::For
-                                | TokenType::Loop | TokenType::While | TokenType::If | TokenType::Else | TokenType::Print | TokenType::Return) {
+                                | TokenType::Loop | TokenType::While | TokenType::If | TokenType::Else | TokenType::Return) {
 
                                 if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
                                     println!("Synced on next token {}", next_token_type.as_string());
@@ -1060,46 +1055,6 @@ impl<'a> Parser<'a>  {
                 expression: Box::new(expr)
             }, self.location_at_position(start_position),
             self.location_at_position(self.lexer.current_position()))));
-        }
-
-        //Not an expression statement
-        self.lexer.set_position(start_position);
-        Ok(None)
-    }
-
-    fn print_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
-        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
-            println!("Parser: Print Statement");
-        }
-
-        let start_position = self.lexer.current_position();
-
-        //Match keyword print
-        if let Some(token) = self.lexer.current_token() {
-            let printtoken = token?;
-
-            let token_type = printtoken.token_type();
-            if let TokenType::Print = token_type {
-                //Advance lexer
-                self.lexer.advance();
-
-                let expr_position = self.lexer.current_position();
-
-                //Match an expression
-                if let Some(expr) = self.expression()? {
-                    //Match semicolon, allowing implicit if enabled
-                    self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
-
-                    //Return print statement
-                    return Ok(Some(StmtNode::Print(Print {
-                        expression: Box::new(expr)
-                    }, self.location_at_position(start_position),
-                    self.location_at_position(self.lexer.current_position()))));
-                }
-                else {
-                    return Err(self.make_error(format!("Expected an expression after keyword '{}'.", token_type.as_string()), expr_position));
-                }
-            }
         }
 
         //Not an expression statement

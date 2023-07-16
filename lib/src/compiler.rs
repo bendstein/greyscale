@@ -8,7 +8,6 @@ use crate::token::token_type::TokenType;
 use crate::value::Values;
 use crate::value::object;
 use crate::value::object::Function;
-use crate::value::object::FunctionType;
 use crate::value::object::Object;
 use crate::vm::error;
 use crate::ops;
@@ -166,9 +165,6 @@ impl<'a> Compiler<'a> {
             },
             StmtNode::Expression(expression, _, end_loc) => {
                 self.stmt_expression(expression, end_loc);
-            },
-            StmtNode::Print(print, loc, _) => {
-                self.stmt_print(print, loc);
             },
             StmtNode::For(stmt, loc, end_loc) => {
                 self.stmt_for(stmt, loc, end_loc);
@@ -700,14 +696,6 @@ impl<'a> Compiler<'a> {
 
         //Push pop
         self.target.chunk.write(ops::OP_POP, end_loc.line);
-    }
-
-    fn stmt_print(&mut self, stmt: stmt::Print, loc: Location) {
-        //Compile expression
-        self.expr(*stmt.expression);
-
-        //Push print
-        self.target.chunk.write(ops::OP_PRINT, loc.line);
     }
 
     fn stmt_declaration(&mut self, stmt: stmt::Declaration, loc: Location) {

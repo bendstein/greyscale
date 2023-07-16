@@ -1,6 +1,6 @@
 use std::{fs::File, io::Read, time::{Duration, Instant}, rc::Rc};
 
-use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk};
+use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk, value::object::Native};
 use unicode_segmentation::UnicodeSegmentation;
 
 fn main() -> Result<(), String> {
@@ -84,7 +84,59 @@ fn main() -> Result<(), String> {
     }
 
     let mut vm = VirtualMachine::new(compiled)
-        .map_err(handle_err)?;
+        .map_err(handle_err)?
+        .register_natives(vec![
+            Native {
+                arity: 0,
+                name: "time".to_string(),
+                function: |_, _| {
+                    let millis = Instant::now().elapsed().as_millis();
+                    Ok(greyscale::value::Value::Int(millis.max(i64::MAX as u128) as i64))
+                }
+            },
+            Native {
+                arity: 1,
+                name: "sleep".to_string(),
+                function: |args, line| {
+                    let duration = args.first().unwrap();
+                    
+                    if let greyscale::value::Value::Int(n) = duration {
+                        std::thread::sleep(Duration::from_millis(*n as u64));
+                        Ok(greyscale::value::Value::Void)
+                    }
+                    else {
+                        Err(GreyscaleError::RuntimeErr("Expected an integer".to_string(), greyscale::location::Location { column: 0, line }))
+                    }
+                }
+            },
+            Native {
+                arity: 1,
+                name: "panic".to_string(),
+                function: |args, _| {
+                    let message = args.first().unwrap();
+
+                    panic!("{}", message);
+                }
+            },
+            Native {
+                arity: 1,
+                name: "print".to_string(),
+                function: |args, _| {
+                    let message = args.first().unwrap();
+                    print!("{}", message);
+                    Ok(greyscale::value::Value::Void)
+                }
+            },
+            Native {
+                arity: 1,
+                name: "println".to_string(),
+                function: |args, _| {
+                    let message = args.first().unwrap();
+                    println!("{}", message);
+                    Ok(greyscale::value::Value::Void)
+                }
+            }
+        ]);
 
     fn handle_err(err: GreyscaleError) -> String {
         match err {

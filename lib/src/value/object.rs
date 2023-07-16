@@ -1,11 +1,14 @@
 use std::fmt::Display;
 
-use crate::chunk::Chunk;
+use crate::{chunk::Chunk, vm::error::GreyscaleError, location::Location};
+
+use super::Value;
 
 #[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum Object {
     String(String),
-    Function(Function)
+    Function(Function),
+    NativeFunction(Native)
 }
 
 impl Display for Object {
@@ -25,7 +28,8 @@ impl Object {
                 } else {
                     format!("_{}", f.arity)
                 }, f.name())
-            }
+            },
+            Object::NativeFunction(n) => n.name.clone()
         }
     }
 
@@ -52,6 +56,19 @@ impl Object {
         }
         else {
             panic!("Not a function!")
+        }
+    }
+
+    pub fn is_native_function(&self) -> bool {
+        matches!(self, Self::NativeFunction(_))
+    }
+
+    pub fn unwrap_native_function(&self) -> Native {
+        if let Self::NativeFunction(n) = self {
+            n.clone()
+        }
+        else {
+            panic!("Not a native function!")
         }
     }
 
@@ -95,6 +112,9 @@ impl Object {
                     //Push chunk
                     bytes.extend(chunk_bytes);
                 }
+            },
+            Object::NativeFunction(_) => {
+                //Don't write native function
             }
         }
 
@@ -186,6 +206,40 @@ impl Function {
         match &self.func_type {
             FunctionType::TopLevel => "<script>".to_string(),
             FunctionType::Function(name) => name.clone(),
+        }
+    }
+}
+
+pub type NativeFunction = fn(args: Vec<Value>, line: usize) -> Result<Value, GreyscaleError>;
+
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct Native {
+    pub arity: u8,
+    pub name: String,
+    pub function: NativeFunction
+}
+
+impl Default for Native {
+    fn default() -> Self {
+        Native {
+            arity: 0,
+            name: String::new(),
+            function: |_, _| Ok(Value::default())
+        }
+    }
+}
+
+impl Native {
+    pub fn call(&self, args: Vec<Value>, line: usize) -> Result<Value, GreyscaleError> {
+        if args.len() != self.arity as usize {
+            Err(GreyscaleError::RuntimeErr(format!("Wrong number of arguments ({}) for function {}. Expected: {}", args.len(), &self.name, self.arity),
+                Location {
+                    column: 0,
+                    line
+                }))
+        }
+        else {
+            (self.function)(args, line)
         }
     }
 }

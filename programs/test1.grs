@@ -1,16 +1,8 @@
 {
-    func factorial(i) {
-        func sub(a, b) => a - b;
+    let x = println;
 
-        if i <= 1 {
-            return 1;
-        }
-        else {
-            return i * factorial(sub(i, 1));
-        }
-    }
-
-    for let i = 2; i < 15; i += 1 {
-        print factorial(i);
+    {
+        x('a');
+        println('a');
     }
 }

@@ -321,8 +321,7 @@ pub mod statement {
         For(For, Location, Location),
         While(While, Location, Location),
         Loop(Loop, Location, Location),
-        Return(Return, Location, Location),
-        Print(Print, Location, Location)
+        Return(Return, Location, Location)
     }
 
     impl StmtNode {
@@ -336,8 +335,7 @@ pub mod statement {
                 StmtNode::For(_, _, _) => String::from("For"),
                 StmtNode::While(_, _, _) => String::from("While"),
                 StmtNode::Loop(_, _, _) => String::from("Loop"),
-                StmtNode::Return(_, _, _) => String::from("Return"),
-                StmtNode::Print(_, _, _) => String::from("Print"),
+                StmtNode::Return(_, _, _) => String::from("Return")
             }
         }
 
@@ -351,8 +349,7 @@ pub mod statement {
                 Self::For(_, l, _) => *l,
                 Self::While(_, l, _) => *l,
                 Self::Loop(_, l, _) => *l,
-                Self::Return(_, l, _) => *l,
-                Self::Print(_, l, _) => *l
+                Self::Return(_, l, _) => *l
             }
         }
 
@@ -366,8 +363,7 @@ pub mod statement {
                 Self::For(_, _, l) => *l,
                 Self::While(_, _, l) => *l,
                 Self::Loop(_, _, l) => *l,
-                Self::Return(_, _, l) => *l,
-                Self::Print(_, _, l) => *l
+                Self::Return(_, _, l) => *l
             }
         }
   
@@ -488,13 +484,7 @@ pub mod statement {
                     else {
                          initial
                     }
-                },
-                StmtNode::Print(stmt, _, _) => {
-                    let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
-                    let expr = stmt.expression.debug_string(indent + 6, program);
-                    
-                    format!("{initial}\n{expr}").replace("      ", "|     ")
-                },
+                }
             }
         }
     }
@@ -556,8 +546,4 @@ pub mod statement {
         pub expression: Option<Box<ExprNode>>
     }
 
-    #[derive(Debug)]
-    pub struct Print {
-        pub expression: Box<ExprNode>
-    }
 }

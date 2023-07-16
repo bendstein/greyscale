@@ -69,7 +69,6 @@ impl Chunk {
 
             //Keywords --------------------------------------------------------
             Op::Return => self.disassemble_instr_simple(op, offset, s),
-            Op::Print => self.disassemble_instr_simple(op, offset, s),
             //Internal
             Op::Pop => self.disassemble_instr_simple(op, offset, s),
             Op::PopN => self.disassemble_instr_w_arg(op, offset, s),

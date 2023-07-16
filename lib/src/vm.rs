@@ -1,6 +1,6 @@
 use std::{rc::Rc, collections::HashMap};
 
-use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType}}, constants, location::Location};
+use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location};
 
 use self::{error::GreyscaleError, settings::VMSettings, frame::CallFrame};
 
@@ -44,6 +44,18 @@ impl VirtualMachine {
         s.push_value(Value::Object(Rc::new(Object::Function(function))))?;
 
         Ok(s)
+    }
+
+    pub fn register_natives(mut self, natives: Vec<Native>) -> Self {
+        for native in natives {    
+            let name = native.name.clone();
+
+            let value = Value::Object(Rc::new(Object::NativeFunction(native)));
+
+            self.globals.insert(name, value);
+        }
+
+        self
     }
 
     pub fn execute(&mut self) -> GreyscaleResult {    
@@ -331,17 +343,6 @@ impl VirtualMachine {
                 }
                 else {
                     return Err(self.make_error("Expected a return value.".to_string()));
-                }
-            },
-            Op::Print => {
-                if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
-                    println!("\n------VM Output------\n");
-                }
-
-                println!("{}", self.pop_value().unwrap_or_default());
-
-                if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
-                    println!("\n----End VM Output----\n");
                 }
             },
             //Internal
@@ -1009,7 +1010,17 @@ impl VirtualMachine {
                                 Err(self.make_error(format!("Wrong number of arguments ({}) for function {}. Expected: {}", n, func.name(), func.arity)))
                             }
                             else {
-                                self.call(obj.unwrap_function())
+                                self.call(func)
+                            }
+                        }
+                        else if obj.is_native_function() {
+                            let func = obj.unwrap_native_function();
+
+                            if func.arity != n {
+                                Err(self.make_error(format!("Wrong number of arguments ({}) for function {}. Expected: {}", n, func.name.clone(), func.arity)))
+                            }
+                            else {
+                                self.call_native(func)
                             }
                         }
                         else {
@@ -1039,6 +1050,27 @@ impl VirtualMachine {
         }
 
         self.frames.push(frame);
+
+        Ok(())
+    }
+
+    fn call_native(&mut self, func: Native) -> GreyscaleResult {
+        //Pop and collect arguments
+        let args: Vec<Value> = if func.arity == 0 {
+            Vec::new()
+        } else {
+            let stack_len = self.stack.len();
+            self.stack.drain(stack_len.saturating_sub(func.arity as usize)..).collect()
+        };
+
+        //Pop native function
+        let _= self.pop_value();
+
+        //Call native function
+        let result = func.call(args, self.get_line())?;
+
+        //Push result to stack
+        self.push_value(result)?;
 
         Ok(())
     }
