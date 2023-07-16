@@ -6,7 +6,7 @@ use ast::expression::ExprNode;
 use ast::statement::StmtNode;
 use crate::location::Location;
 
-use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, Function, FunctionType}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword}}, settings::ParserSettings};
+use self::{ast::{expression::{BinaryRHS, Binary, Assignment, Unary, Call, Literal, Identifier, InterpolatedString, Function, FunctionType}, LiteralType, statement::{Expression, Print, Declaration, Block, ConditionalBranch, Conditional, Loop, While, For, Keyword, Return}}, settings::ParserSettings};
 
 pub mod ast;
 pub mod settings;
@@ -211,6 +211,11 @@ impl<'a> Parser<'a> {
         //Try match keyword statement
         if let Some(kwd_stmt) = self.keyword_statement()? {
             return Ok(Some(kwd_stmt));
+        }
+
+        //Try match return statement
+        if let Some(ret_stmt) = self.return_statement()? {
+            return Ok(Some(ret_stmt));
         }
 
         Ok(None)
@@ -712,6 +717,7 @@ impl<'a> Parser<'a> {
                                 if let Some(block) = self.block_statement()? {
                                     return Ok(Some(ExprNode::Function(Function {
                                         args,
+                                        name: None,
                                         body: FunctionType::Block(Box::new(block))
                                     }, self.location_at_position(self.lexer.current_position()))))
                                 }
@@ -724,6 +730,7 @@ impl<'a> Parser<'a> {
                                 if let Some(expr) = self.expression()? {
                                     return Ok(Some(ExprNode::Function(Function {
                                         args,
+                                        name: None,
                                         body: FunctionType::Inline(Box::new(expr))
                                     }, self.location_at_position(self.lexer.current_position()))))
                                 }
@@ -1251,13 +1258,15 @@ impl<'a> Parser<'a>  {
                         self.lexer.advance();
 
                         //Match a function expression
-                        if let Some(ExprNode::Function(f, f_loc)) = self.func()? {
+                        if let Some(ExprNode::Function(mut f, f_loc)) = self.func()? {
                             //For an inline function, require a semicolon
                             if f.body.is_inline() {
                                 //Match semicolon, allowing implicit if enabled
                                 self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
                             }
                             
+                            f.name = Some(id_token.clone());
+
                             //Return declaration statement
                             return Ok(Some(StmtNode::Declaration(Declaration {
                                 id: id_token,
@@ -1646,6 +1655,46 @@ impl<'a> Parser<'a>  {
         self.lexer.set_position(start_position);
         Ok(None)
     }
+
+    fn return_statement(&mut self) -> Result<Option<StmtNode>, GreyscaleError> {
+        if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {
+            println!("Parser: Return Statement");
+        }
+
+        let start_position = self.lexer.current_position();
+
+        //Match keyword return
+        if let Some(token) = self.lexer.current_token() {
+            let return_token = token?;
+            let return_token_type = return_token.token_type();
+
+            if let TokenType::Return = return_token_type {
+                //Advance lexer
+                self.lexer.advance();
+
+                //Match optional expression
+                let expr = if let Some(expr) = self.expression()? {
+                    //Match semicolon, allowing implicit if enabled
+                    self.match_semicolon(self.settings.allow_implicit_final_semicolon)?;
+                    Some(Box::new(expr))
+                }
+                else {
+                    None
+                };
+
+                //Return print statement
+                return Ok(Some(StmtNode::Return(Return {
+                    expression: expr
+                }, self.location_at_position(start_position),
+                self.location_at_position(self.lexer.current_position()))));
+            }
+        }
+
+        //Not an expression statement
+        self.lexer.set_position(start_position);
+        Ok(None)
+    }
+
 
     fn match_semicolon(&mut self, allow_implicit: bool) -> Result<(), GreyscaleError> {
         if (constants::TRACE & constants::TRACE_PARSER) == constants::TRACE_PARSER {

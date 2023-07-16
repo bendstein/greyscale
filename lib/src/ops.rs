@@ -67,6 +67,8 @@ pub enum Op {
     //Internal
     Concat,
 
+    //N-ary operators ----------------
+    Call,
 
     //Other --------------------------
     Unknown(u8)
@@ -175,6 +177,9 @@ pub const OP_LESS_EQUAL: u8     = 76;
 //Internal
 pub const OP_CONCAT: u8         = 77;
 
+//N-ary operators --------------------
+pub const OP_CALL: u8           = 100;
+
 
 lazy_static! {
     static ref OPS_PAIRS: Vec<(u8, Op)> = vec![
@@ -241,7 +246,10 @@ lazy_static! {
         (OP_GREATER_EQUAL, Op::GreaterEqual),
         (OP_LESS_EQUAL, Op::LessEqual),
         //Internal
-        (OP_CONCAT, Op::Concat)
+        (OP_CONCAT, Op::Concat),
+
+        //N-ary operators -----------------------
+        (OP_CALL, Op::Call)
     ];  
     
     static ref OP_NAMES: HashMap<Op, &'static str> = [
@@ -308,7 +316,10 @@ lazy_static! {
         (Op::GreaterEqual, "OP_GREATER_EQUAL"),
         (Op::LessEqual, "OP_LESS_EQUAL"),
         //Internal
-        (Op::Concat, "OP_CONCAT")
+        (Op::Concat, "OP_CONCAT"),
+
+        //N-ary operators -----------------------
+        (Op::Call, "OP_CALL")
     ].into_iter().collect();
 
     static ref OPS_FWD: HashMap<u8, Op> = OPS_PAIRS.iter()

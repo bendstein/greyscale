@@ -108,18 +108,24 @@ fn main() -> Result<(), String> {
     }
 
     if args.contains(&"/debug".to_string()) {
-        vm_step_through(vm, !args.contains(&"/auto".to_string()))
-            .map_err(handle_err)
+        vm_step_through(&mut vm, !args.contains(&"/auto".to_string()))
+            .map_err(|e| {
+                let message = handle_err(e);
+                format!("{message}\n{}", vm.get_call_stack_trace())
+            })
     }
     else {
         vm.execute()
-            .map_err(handle_err)
+            .map_err(|e| {
+                let message = handle_err(e);
+                format!("{message}\n{}", vm.get_call_stack_trace())
+            })
     }
 }
 
-fn vm_step_through(mut vm: VirtualMachine, manual: bool) -> Result<(), GreyscaleError> { 
+fn vm_step_through(vm: &mut VirtualMachine, manual: bool) -> Result<(), GreyscaleError> { 
     while !vm.is_at_end() {
-        write_vm_state(&vm)?;
+        write_vm_state(vm)?;
 
         if manual {
             let mut temp = String::new();

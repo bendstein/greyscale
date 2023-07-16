@@ -114,6 +114,9 @@ impl Chunk {
             //Internal
             Op::Concat => self.disassemble_instr_simple(op, offset, s),
 
+            //N-ary operators -------------------------------------------------
+            Op::Call => self.disassemble_instr_w_arg(op, offset, s),
+
             //Other -----------------------------------------------------------
             Op::Unknown(_) => self.disassemble_instr_unknown(instr, offset, s)
         }

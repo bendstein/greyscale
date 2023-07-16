@@ -260,6 +260,7 @@ pub mod expression {
     #[derive(Debug)]
     pub struct Function {
         pub args: Vec<Token>, 
+        pub name: Option<Token>,
         pub body: FunctionType
     }
 
@@ -480,7 +481,7 @@ pub mod statement {
                     let initial = format!("{:indent$}|---- {}", "", self.name(), indent = indent - 4);
 
                     if let Some(expr) = &stmt.expression {
-                        let expr_string = expr.debug_string(indent + 4, program);
+                        let expr_string = expr.debug_string(indent + 6, program);
 
                         format!("{initial}\n{expr_string}").replace("      ", "|     ")
                     }

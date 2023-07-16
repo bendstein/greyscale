@@ -309,8 +309,29 @@ impl VirtualMachine {
 
             //Keywords  ------------------------------------------------------------------------
             Op::Return => {
-                //println!("{}", self.pop_value().unwrap_or_default());
-                return Ok(());
+                if let Some(result) = self.pop_value() {
+                    //Pop frame
+                    let frame = self.frames.pop();
+                    
+                    //If last frame, was top-level. Stop execution
+                    if self.frames.is_empty() {
+                        //Pop current function pointer and return value of void
+                        let _ = self.pop_value();
+                        let _ = self.pop_value();
+                        return Ok(())
+                    }
+
+                    //Pop anything left over on the stack from the frame
+                    if let Some(frame) = frame {
+                        self.stack.truncate(frame.stack_offset);
+                    }
+
+                    //Push return value
+                    self.push_value(result)?;
+                }
+                else {
+                    return Err(self.make_error("Expected a return value.".to_string()));
+                }
             },
             Op::Print => {
                 if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
@@ -471,6 +492,16 @@ impl VirtualMachine {
             //Internal
             Op::Concat => self.binary_op(&instr)?,
 
+            //N-ary operators  -----------------------------------------------------------------
+            Op::Call => {
+                if let Some(n) = self.move_next()? {
+                    self.nary_op(&Op::Call, n)?;
+                }
+                else {
+                    return Err(self.make_error("Expected an argument count for Call.".to_string()));
+                }
+            },
+
             //Other
             Op::Unknown(n) => {
                 return Err(self.make_error(format!("Invalid instruction '{n}'.")));
@@ -499,6 +530,17 @@ impl VirtualMachine {
 
     pub fn peek_value(&self) -> Option<&Value> {
         self.stack.last()
+    }
+
+    pub fn peek_value_n(&self, n: usize) -> Option<&Value> {
+        let index = self.stack.len().saturating_sub(n);
+
+        if self.stack.len() > index {
+            Some(&self.stack[index])
+        }
+        else {
+            None
+        }
     }
 
     fn read_const(&self, n: usize) -> Result<&Value, GreyscaleError> {
@@ -952,6 +994,55 @@ impl VirtualMachine {
         }
     }
 
+    fn nary_op(&mut self, op: &Op, n: u8) -> GreyscaleResult {
+        match op {
+            Op::Call => {
+                let value = self.peek_value_n(n as usize + 1)
+                    .ok_or_else(|| self.make_error("No value found to call".to_string()))?;
+
+                match value {
+                    Value::Object(obj) => {
+                        if obj.is_function() {
+                            let func = obj.unwrap_function();
+
+                            if func.arity != n {
+                                Err(self.make_error(format!("Wrong number of arguments ({}) for function {}. Expected: {}", n, func.name(), func.arity)))
+                            }
+                            else {
+                                self.call(obj.unwrap_function())
+                            }
+                        }
+                        else {
+                            Err(self.make_error(format!("Value {} is not callable.", obj.string())))
+                        }
+                    },
+                    _ => Err(self.make_error(format!("Value {} is not callable.", value.string())))
+                }
+            },
+            _ => Err(self.make_error(format!("Invalid n-ary operator {op}")))
+        }
+    }
+
+    fn call(&mut self, func: Function) -> GreyscaleResult {
+        let arity = func.arity;
+
+        //Create a new call frame
+        let frame = CallFrame {
+            function: func,
+            ip: 0,
+            stack_offset: self.stack.len().saturating_sub((arity + 1) as usize),
+        };
+
+        //Push frame
+        if self.frames.len() == constants::MAX_FRAMES {
+            return Err(self.make_error("Stack overflow.".to_string()));
+        }
+
+        self.frames.push(frame);
+
+        Ok(())
+    }
+
     fn push_value(&mut self, value: Value) -> GreyscaleResult {
         if self.stack.len() == constants::MAX_STACK {
             return Err(self.make_error("Stack overflow".to_string()));
@@ -971,7 +1062,10 @@ impl VirtualMachine {
     }
 
     pub fn is_at_end(&self) -> bool {
-        if let Ok(c) = self.chunk() {
+        if self.frames.is_empty() {
+            true
+        }
+        else if let Ok(c) = self.chunk() {
             self.ip() >= c.count()
         }
         else {
@@ -1033,8 +1127,24 @@ impl VirtualMachine {
     pub fn get_stack_trace(&self) -> String {
         let mut s = String::new();
 
-        for value in &self.stack {
+        for (n, value) in self.stack.iter().enumerate() {
+            let stack_offset = self.current_frame_offset();
+
+            if stack_offset > 0 && stack_offset == n {
+                s.push_str("\n   ->>     ");
+            }
+
             s.push_str(&format!("[ {value} ]"));
+        }
+
+        s
+    }
+
+    pub fn get_call_stack_trace(&self) -> String {
+        let mut s = String::new();
+
+        for frame in &self.frames {
+            s.push_str(&format!("{}\n", frame.function.name()));
         }
 
         s

@@ -1,9 +1,14 @@
 use std::rc::Rc;
 
+use crate::chunk::Chunk;
 use crate::parser::ast;
+use crate::parser::ast::LiteralType;
+use crate::parser::ast::expression::Literal;
 use crate::token::token_type::TokenType;
 use crate::value::Values;
+use crate::value::object;
 use crate::value::object::Function;
+use crate::value::object::FunctionType;
 use crate::value::object::Object;
 use crate::vm::error;
 use crate::ops;
@@ -20,15 +25,15 @@ use value::Value;
 use crate::location::Location;
 
 /**
- * Types of structures that can be affected by return/break/continue/etc
+ * Types of structures that can be affected by break/continue/etc
  */
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum ControllableType {
     #[default]
     Loop,
-    Function,
     Switch,
-    Catch
+    Catch,
+    Top
 }
 
 #[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
@@ -39,7 +44,6 @@ pub struct Controllable {
     pub patch_end: usize
 }
 
-#[allow(dead_code)]
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
@@ -63,12 +67,28 @@ impl<'a> Compiler<'a> {
         //Claim locals slot 0 for internal use
         compiler.locals.push(vec![String::new()]);
 
+        let mut last_location = Location::new(0, 0);
+
         for statement in ast.statements {
             match statement {
-                crate::parser::ast::Node::Expression(n) => compiler.expr(*n),
-                crate::parser::ast::Node::Statement(n) => compiler.stmt(*n),
+                crate::parser::ast::Node::Expression(n) => {
+                    last_location = n.location();
+                    compiler.expr(*n)
+                },
+                crate::parser::ast::Node::Statement(n) => {
+                    last_location = n.end_location();
+                    compiler.stmt(*n)
+                },
             }
         }
+
+        //Push return void
+        compiler.expr_literal(Literal {
+            value: LiteralType::Void
+        }, last_location);
+        
+        //Push return keyword
+        compiler.target.chunk.write(ops::OP_RETURN, last_location.line);
 
         if compiler.errors.is_empty() {
             Ok(compiler.target)
@@ -121,11 +141,11 @@ impl<'a> Compiler<'a> {
             ExprNode::Identifier(id, loc) => {
                 self.expr_id(id, loc);
             },
-            ExprNode::Function(_, loc) => {
-                self.errors.push(GreyscaleError::CompileErr("Function expression compilation not yet implemented.".to_string(), loc));
+            ExprNode::Function(func, loc) => {
+                self.expr_function(func, loc);
             },
-            ExprNode::Call(_, loc) => {
-                self.errors.push(GreyscaleError::CompileErr("Call expression compilation not yet implemented.".to_string(), loc));
+            ExprNode::Call(call, _) => {
+                self.expr_call(call);
             },
         }
     }
@@ -159,8 +179,8 @@ impl<'a> Compiler<'a> {
             StmtNode::Loop(stmt, loc, _) => {
                 self.stmt_loop(stmt, loc);
             },
-            StmtNode::Return(_, loc, _) => {
-                self.errors.push(GreyscaleError::CompileErr("Return statement compilation not yet implemented.".to_string(), loc));
+            StmtNode::Return(stmt, loc, _) => {
+                self.stmt_return(stmt, loc);
             },
         }
     }
@@ -249,7 +269,7 @@ impl<'a> Compiler<'a> {
                 let elem = &scope[j];
 
                 if elem == name {
-                    let mut position = scope.len() - j - 1;
+                    let mut position = j;
 
                     for x in 0..i {
                         position += self.locals[x].len();
@@ -259,7 +279,7 @@ impl<'a> Compiler<'a> {
                 }
             }
         }
-
+        
         None
     }
 
@@ -269,27 +289,27 @@ impl<'a> Compiler<'a> {
 impl<'a> Compiler<'a> {
     fn expr_literal(&mut self, lit: expr::Literal, location: Location) {
         match lit.value {
-            ast::LiteralType::Void => {
+            LiteralType::Void => {
                 let value = Value::Void;
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
-            ast::LiteralType::Null => {
+            LiteralType::Null => {
                 let value = Value::Null;
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
-            ast::LiteralType::Boolean(b) => {
+            LiteralType::Boolean(b) => {
                 let value = Value::Bool(b);
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
-            ast::LiteralType::String(s) => {
+            LiteralType::String(s) => {
                 let value = Value::Object(Rc::new(Object::String(s)));
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
-            ast::LiteralType::Double(n) => {
+            LiteralType::Double(n) => {
                 let value = Value::Double(n);
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
-            ast::LiteralType::Integer(n) => {
+            LiteralType::Integer(n) => {
                 let value = Value::Int(n);
                 self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, location);
             },
@@ -380,7 +400,7 @@ impl<'a> Compiler<'a> {
         if interp.segments.is_empty() {
             self.expr_literal(expr::Literal 
             { 
-                value: ast::LiteralType::String(String::from(""))
+                value: LiteralType::String(String::from(""))
             }, location);
         }
         else {
@@ -426,6 +446,85 @@ impl<'a> Compiler<'a> {
             self.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
                 id_token_type.as_string()), location));
         }
+    }
+
+    fn expr_function(&mut self, expr: expr::Function, loc: Location) {
+        let name = match expr.name {
+            None => "".to_string(),
+            Some(t) => {
+                let token_type = t.token_type();
+                        
+                if let TokenType::Identifier(range) = &token_type {
+                    (&self.program)[range.clone()].join("")
+                }
+                else {
+                    "".to_string()
+                }
+            }
+        };
+
+        let mut func_compiler = Compiler {
+            program: Rc::clone(&self.program),
+            errors: Vec::new(),
+            target: Function {
+                arity: expr.args.len() as u8,
+                chunk: Chunk::default(),
+                func_type: object::FunctionType::Function(if name.is_empty() {
+                    "anon".to_string()
+                } else {
+                    name.clone()
+                }),
+            },
+            constants: self.constants.clone(),
+            locals: vec![ vec![ name ] ],
+            controllables: Vec::new(),
+        };
+
+        //Push local scope
+        func_compiler.locals.push(Vec::new());
+
+        //Push argument names as locals
+        for arg in &expr.args {
+            let id_token_type = arg.token_type();
+
+            let content = if let TokenType::Identifier(range) = arg.token_type() {
+                (&self.program)[range.clone()].join("")
+            }
+            else {
+                func_compiler.errors.push(GreyscaleError::CompileErr(format!("Invalid identifier '{}'.", 
+                    id_token_type.as_string()), loc));
+                    return;
+            };
+
+            //Value is on top of the stack, push local to current scope in compiler
+            func_compiler.locals.last_mut().unwrap().push(content);
+        }
+
+        //Compile function body
+        match expr.body {
+            expr::FunctionType::Block(b) => {
+                let loc = b.end_location();
+                func_compiler.stmt(*b);
+
+                //Push return void for if function doesn't return
+                func_compiler.expr_literal(Literal {
+                    value: LiteralType::Void
+                }, loc);
+
+                func_compiler.target.chunk.write(ops::OP_RETURN, loc.line);
+            },
+            expr::FunctionType::Inline(i) => {
+                let loc = i.location();
+                func_compiler.expr(*i);
+
+                //Push return
+                func_compiler.target.chunk.write(ops::OP_RETURN, loc.line);
+            },
+        }
+
+        //Write function
+        let value = Value::Object(Rc::new(Object::Function(func_compiler.target)));
+        self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, loc);
     }
 
     fn expr_assign(&mut self, expr: expr::Assignment, location: Location) {
@@ -536,6 +635,33 @@ impl<'a> Compiler<'a> {
             self.push_const(ops::OP_SET_GLOBAL, ops::OP_SET_GLOBAL_LONG, Value::Object(Rc::clone(&id_rc)), location);
         }
     }
+
+    fn expr_call(&mut self, expr: expr::Call) {
+        let mut current_loc = expr.callable.location();
+
+        //Write operand
+        self.expr(*expr.callable);
+
+        //Write calls
+        for call in expr.calls {
+            if let Some(first_arg) = &call.first() {
+                current_loc = first_arg.location();
+            }
+
+            let call_len = call.len() as u8;
+
+            //Write args
+            for arg in call {
+                self.expr(arg);
+            }
+
+            //Write call operator
+            self.target.chunk.write(ops::OP_CALL, current_loc.line);
+
+            //Write call length
+            self.target.chunk.write(call_len, current_loc.line);
+        }
+    }
 }
 
 //Statements
@@ -551,8 +677,8 @@ impl<'a> Compiler<'a> {
             self.stmt(stmt);
         }
 
+        //Pop local scope
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
-            //Pop local scope
             let len = self.locals.last().unwrap().len();
 
             if len < u8::MAX as usize {
@@ -602,8 +728,8 @@ impl<'a> Compiler<'a> {
         if let TokenType::Identifier(range) = id_token_type {
             let content = (&self.program)[range.clone()].join("");
 
-            //If nothing on local scope stack, this is global
-            if self.locals.is_empty() {
+            //If nothing on local scope stack (slot 0 is reserved), this is global
+            if self.locals.len() <= 1 {
                 //Add id to constants table and get its index
                 let id_value = Value::Object(Rc::new(Object::String(content)));
                 self.push_const(ops::OP_DEF_GLOBAL, ops::OP_DEF_GLOBAL_LONG, id_value, loc);
@@ -814,8 +940,8 @@ impl<'a> Compiler<'a> {
         //Pop from stack for break/continue
         self.controllables.pop();
 
+        //Pop local scope
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
-            //Pop local scope
             let len = self.locals.last().unwrap().len();
 
             if len < u8::MAX as usize {
@@ -841,20 +967,9 @@ impl<'a> Compiler<'a> {
                 for i in (0..self.controllables.len()).rev() {
                     let ctrl_top = self.controllables[i];
 
-                    match ctrl_top.ctype {
-                        ControllableType::Loop => {
-                            found = Some(ctrl_top);
-                            break;
-                        },
-                        ControllableType::Function => {
-                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
-                        },
-                        ControllableType::Switch => {
-                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
-                        },
-                        ControllableType::Catch => {
-                            self.errors.push(GreyscaleError::CompileErr("Not implemented.".to_string(), loc));
-                        }
+                    if let ControllableType::Loop = ctrl_top.ctype {
+                        found = Some(ctrl_top);
+                        break;
                     }
                 }
 
@@ -895,5 +1010,25 @@ impl<'a> Compiler<'a> {
                 self.errors.push(GreyscaleError::CompileErr("Invalid keyword token.".to_string(), loc));
             }
         }
+    }
+
+    fn stmt_return(&mut self, stmt: stmt::Return, loc: Location) {
+        if self.target.func_type.is_top_level() {
+            self.errors.push(GreyscaleError::CompileErr(format!("Token {} is not valid here.", TokenType::Return.as_string()), loc));
+            return;
+        }
+
+        //If returning an expression, push it, otherwise void
+        if let Some(expr) = stmt.expression {
+            self.expr(*expr);
+        }
+        else {
+            self.expr_literal(Literal {
+                value: LiteralType::Void
+            }, loc);
+        }
+
+        //Push return keyword
+        self.target.chunk.write(ops::OP_RETURN, loc.line);
     }
 }
