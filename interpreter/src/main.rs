@@ -135,6 +135,75 @@ fn main() -> Result<(), String> {
                     println!("{}", message);
                     Ok(greyscale::value::Value::Void)
                 }
+            },
+            Native {
+                arity: 0,
+                name: "readln".to_string(),
+                function: |_, line| {
+                    let mut input: String = String::new();
+                    if let Err(err) = std::io::stdin().read_line(&mut input) {
+                        let message = match err.kind() {
+                            std::io::ErrorKind::NotFound => "An I/O error occurred: Not Found.".to_string(),
+                            std::io::ErrorKind::PermissionDenied => "An I/O error occurred: Permission Denied.".to_string(),
+                            std::io::ErrorKind::TimedOut => "An I/O error occurred: Operation Timed Out.".to_string(),
+                            std::io::ErrorKind::UnexpectedEof => "An I/O error occurred: Unexpected End Of Input.".to_string(),
+                            std::io::ErrorKind::OutOfMemory => "An I/O error occurred: Out of Memory.".to_string(),
+                            _ => "An I/O error occurred.".to_string(),
+                        };
+
+                        return Err(GreyscaleError::RuntimeErr(message, greyscale::location::Location { column: 0, line }));
+                    }
+
+                    Ok(greyscale::value::Value::Object(Rc::new(greyscale::value::object::Object::String(input.trim().to_string()))))
+                }
+            },
+            Native {
+                arity: 0,
+                name: "clear".to_string(),
+                function: |_, _| {
+                    print!("\x1B[2J\x1B[1;1H");
+                    Ok(greyscale::value::Value::Void)
+                }
+            },
+            Native {
+                arity: 1,
+                name: "parseInt".to_string(),
+                function: |args, line| {
+                    let s = args.first().unwrap();
+
+                    if s.is_object_string() {
+                        let s = s.unwrap_object_string();
+
+                        match s.parse::<i64>() {
+                            Ok(v) => Ok(greyscale::value::Value::Int(v)),
+                            Err(_) => Err(GreyscaleError::RuntimeErr(format!("{s} is not in a valid format to be parsed as an integer."), 
+                                greyscale::location::Location { column: 0, line }))
+                        }
+                    }
+                    else {
+                        Err(GreyscaleError::RuntimeErr("Expected a string".to_string(), greyscale::location::Location { column: 0, line }))
+                    }
+                }
+            },
+            Native {
+                arity: 1,
+                name: "parseDouble".to_string(),
+                function: |args, line| {
+                    let s = args.first().unwrap();
+
+                    if s.is_object_string() {
+                        let s = s.unwrap_object_string();
+
+                        match s.parse::<f64>() {
+                            Ok(v) => Ok(greyscale::value::Value::Double(v)),
+                            Err(_) => Err(GreyscaleError::RuntimeErr(format!("{s} is not in a valid format to be parsed as a double."), 
+                                greyscale::location::Location { column: 0, line }))
+                        }
+                    }
+                    else {
+                        Err(GreyscaleError::RuntimeErr("Expected a string".to_string(), greyscale::location::Location { column: 0, line }))
+                    }
+                }
             }
         ]);
 

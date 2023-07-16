@@ -1,8 +1,7 @@
-{
-    let x = println;
-
-    {
-        x('a');
-        println('a');
-    }
+func prompt() {
+    clear();
+    println("Guess a number: ");
+    return parseInt(readln());
 }
+
+let x = prompt();
