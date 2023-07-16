@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, time::{Duration, Instant}, rc::Rc};
+use std::{fs::File, io::Read, time::{Duration, Instant, SystemTime}, rc::Rc};
 
 use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk, value::object::Native};
 use unicode_segmentation::UnicodeSegmentation;
@@ -90,8 +90,8 @@ fn main() -> Result<(), String> {
                 arity: 0,
                 name: "time".to_string(),
                 function: |_, _| {
-                    let millis = Instant::now().elapsed().as_millis();
-                    Ok(greyscale::value::Value::Int(millis.max(i64::MAX as u128) as i64))
+                    let millis = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or_default().as_millis();
+                    Ok(greyscale::value::Value::Int(millis.min(i64::MAX as u128) as i64))
                 }
             },
             Native {

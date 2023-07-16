@@ -1,7 +1,14 @@
-func prompt() {
-    clear();
-    println("Guess a number: ");
-    return parseInt(readln());
+func fib(n) {
+    if n < 2 {
+        return n;
+    }
+    return fib(n - 2) + fib(n - 1);
 }
 
-let x = prompt();
+let start = time();
+
+println('Fib start');
+
+println(`{fib(30)}`);
+
+println(`{time() - start} ms`);

@@ -702,20 +702,36 @@ impl VirtualMachine {
             Op::Divide => {
                 if let Value::Int(a) = val_a {
                     if let Value::Int(b) = val_b {
+                        if b == 0 {
+                            return Err(self.make_error("Cannot divide by 0.".to_string()));
+                        }
+
                         self.push_value(Value::Int(a / b))?;
                         return Ok(());
                     }
                     else if let Value::Double(b) = val_b {
+                        if b == 0_f64 {
+                            return Err(self.make_error("Cannot divide by 0.".to_string()));
+                        }
+                        
                         self.push_value(Value::Double((a as f64) / b))?;
                         return Ok(());
                     }
                 }
                 else if let Value::Double(a) = val_a {
                     if let Value::Int(b) = val_b {
+                        if b == 0 {
+                            return Err(self.make_error("Cannot divide by 0.".to_string()));
+                        }
+
                         self.push_value(Value::Double(a / (b as f64)))?;
                         return Ok(());
                     }
                     else if let Value::Double(b) = val_b {
+                        if b == 0_f64 {
+                            return Err(self.make_error("Cannot divide by 0.".to_string()));
+                        }
+
                         self.push_value(Value::Double(a / b))?;
                         return Ok(());
                     }
