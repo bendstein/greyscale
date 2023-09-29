@@ -106,6 +106,31 @@ impl VirtualMachine {
                     return Err(self.make_error("Expected the address of a constant.".to_string()));
                 }
             },
+            //Closures
+            Op::Closure => {
+                if let Some(addr) = self.move_next()? {
+                    let value = self.read_const(addr as usize)?.clone();
+                    self.push_value(value)?;
+                }
+                else {           
+                    return Err(self.make_error("Expected the address of a closure.".to_string()));
+                }
+            },
+            Op::ClosureLong => {
+                if let Some(addr1) = self.move_next()? {
+                    if let Some(addr2) = self.move_next()? {
+                        let addr = (addr2 as u16) + ((addr1 as u16) << 8);
+                        let value = self.read_const(addr as usize)?.clone();
+                        self.push_value(value)?;
+                    }
+                    else {
+                        return Err(self.make_error("Expected the 16-bit address of a closure.".to_string()));
+                    }
+                }
+                else {
+                    return Err(self.make_error("Expected the address of a closure.".to_string()));
+                }
+            },
             //Globals
             Op::DefineGlobal => {
                 if let Some(addr) = self.move_next()? {
@@ -317,6 +342,19 @@ impl VirtualMachine {
                     return Err(self.make_error("Expected the index of the local.".to_string()));
                 }
             },
+            //Upvalues
+            Op::GetUpValue => {
+                todo!()
+            },
+            Op::GetUpValueLong => {
+                todo!()
+            },
+            Op::SetUpValue => {
+                todo!()
+            },
+            Op::SetUpValueLong => {
+                todo!()
+            }
 
 
             //Keywords  ------------------------------------------------------------------------

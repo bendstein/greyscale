@@ -276,7 +276,7 @@ fn write_vm_state(vm: &VirtualMachine) -> Result<(), GreyscaleError> {
         let mut instr = String::new();
         offset = chunk.disassemble_instr(offset, &mut instr);
 
-        instr = instr.replace(['\r', '\n'], "");
+        instr = instr.trim_end().to_string();
 
         instr = format!("{:<41}", instr);
 

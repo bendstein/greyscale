@@ -6,6 +6,9 @@ pub enum Op {
     //Constants
     Constant,
     ConstantLong,
+    //Closures
+    Closure,
+    ClosureLong,
     //Globals
     DefineGlobal,
     DefineGlobalLong,
@@ -18,6 +21,11 @@ pub enum Op {
     GetLocalLong,
     SetLocal,
     SetLocalLong,
+    //Upvalues
+    GetUpValue,
+    GetUpValueLong,
+    SetUpValue,
+    SetUpValueLong,
 
 
     //Keywords -----------------------
@@ -115,18 +123,26 @@ impl From<Op> for u8 {
 //Constants
 pub const OP_CONSTANT: u8       = 0;
 pub const OP_CONSTANT_LONG: u8  = 1;
+//Closures
+pub const OP_CLOSURE: u8        = 2;
+pub const OP_CLOSURE_LONG: u8   = 3;
 //Globals
-pub const OP_DEF_GLOBAL: u8     = 2;
-pub const OP_DEF_GLOBAL_LONG: u8= 3;
-pub const OP_GET_GLOBAL: u8     = 4;
-pub const OP_GET_GLOBAL_LONG: u8= 5;
-pub const OP_SET_GLOBAL: u8     = 6;
-pub const OP_SET_GLOBAL_LONG: u8= 7;
+pub const OP_DEF_GLOBAL: u8     = 4;
+pub const OP_DEF_GLOBAL_LONG: u8= 5;
+pub const OP_GET_GLOBAL: u8     = 6;
+pub const OP_GET_GLOBAL_LONG: u8= 7;
+pub const OP_SET_GLOBAL: u8     = 8;
+pub const OP_SET_GLOBAL_LONG: u8= 9;
 //Locals
-pub const OP_GET_LOCAL: u8      = 8;
-pub const OP_GET_LOCAL_LONG: u8 = 9;
-pub const OP_SET_LOCAL: u8      = 10;
-pub const OP_SET_LOCAL_LONG: u8 = 11;
+pub const OP_GET_LOCAL: u8      = 10;
+pub const OP_GET_LOCAL_LONG: u8 = 12;
+pub const OP_SET_LOCAL: u8      = 12;
+pub const OP_SET_LOCAL_LONG: u8 = 13;
+//Upvalues
+pub const OP_GET_UPVAL: u8      = 14;
+pub const OP_GET_UPVAL_LONG: u8 = 15;
+pub const OP_SET_UPVAL: u8      = 16;
+pub const OP_SET_UPVAL_LONG: u8 = 17;
 
 
 //Keywords ---------------------------
@@ -185,6 +201,9 @@ lazy_static! {
         //Constants
         (OP_CONSTANT, Op::Constant),
         (OP_CONSTANT_LONG, Op::ConstantLong),
+        //Closures
+        (OP_CLOSURE, Op::Closure),
+        (OP_CLOSURE_LONG, Op::ClosureLong),
         //Globals
         (OP_DEF_GLOBAL, Op::DefineGlobal),
         (OP_DEF_GLOBAL_LONG, Op::DefineGlobalLong),
@@ -197,6 +216,11 @@ lazy_static! {
         (OP_GET_LOCAL_LONG, Op::GetLocalLong),
         (OP_SET_LOCAL, Op::SetLocal),
         (OP_SET_LOCAL_LONG, Op::SetLocalLong),
+        //Upvalues
+        (OP_GET_UPVAL, Op::GetUpValue),
+        (OP_GET_UPVAL_LONG, Op::GetUpValueLong),
+        (OP_SET_UPVAL, Op::SetUpValue),
+        (OP_SET_UPVAL_LONG, Op::SetUpValueLong),
 
 
         //Keywords -----------------------------
@@ -254,6 +278,9 @@ lazy_static! {
         //Constants
         (Op::Constant, "OP_CONSTANT"),
         (Op::ConstantLong, "OP_CONSTANT_LONG"),
+        //Closures
+        (Op::Closure, "OP_CLOSURE"),
+        (Op::ClosureLong, "OP_CLOSURE_LONG"),
         //Globals
         (Op::DefineGlobal, "OP_DEFINE_GLOBAL"),
         (Op::DefineGlobalLong, "OP_DEFINE_GLOBAL_LONG"),
@@ -266,6 +293,11 @@ lazy_static! {
         (Op::GetLocalLong, "OP_GET_LOCAL_LONG"),
         (Op::SetLocal, "OP_SET_LOCAL"),
         (Op::SetLocalLong, "OP_SET_LOCAL_LONG"),
+        //Upvalues
+        (Op::GetUpValue, "OP_GET_UPVAL"),
+        (Op::GetUpValueLong, "OP_GET_UPVAL_LONG"),
+        (Op::SetUpValue, "OP_SET_UPVAL"),
+        (Op::SetUpValueLong, "OP_SET_UPVAL_LONG"),
 
 
         //Keywords -----------------------------

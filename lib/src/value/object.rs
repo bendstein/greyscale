@@ -21,13 +21,18 @@ impl Object {
     pub fn string(&self) -> String {
         match self {
             Object::String(s) => s.clone(),
-            Object::Function(f) => match f.func_type {
+            Object::Function(f) => match &f.func_type {
                 FunctionType::TopLevel => "<script>".to_string(),
-                _ => format!("<fn{} {}>", if f.arity == 0 {
+                FunctionType::Function(name) => format!("<fn{} {}>", if f.arity == 0 {
                     "".to_string()
                 } else {
                     format!("_{}", f.arity)
-                }, f.name())
+                }, name),
+                FunctionType::Closure(name, _) => format!("<cl{} {}>", if f.arity == 0 {
+                    "".to_string()
+                } else {
+                    format!("_{}", f.arity)
+                }, name)
             },
             Object::NativeFunction(n) => n.name.clone()
         }
@@ -93,26 +98,10 @@ impl Object {
                     //Push discriminant
                     bytes.push(1_u8);
 
-                    //Push length of name
-                    let nbytes = f.name().into_bytes();
-                    bytes.extend((nbytes.len() as u64).to_be_bytes());
-
-                    //Push name
-                    bytes.extend(nbytes);
-
-                    //Push number of arguments
-                    bytes.push(f.arity);
-
-                    //Encode chunk
-                    let chunk_bytes = f.chunk.encode_as_bytes();
-
-                    //Push chunk length
-                    bytes.extend((chunk_bytes.len() as u64).to_be_bytes());
-
-                    //Push chunk
-                    bytes.extend(chunk_bytes);
+                    //Write function
+                    bytes.extend(f.encode_as_bytes());
                 }
-            },
+            }
             Object::NativeFunction(_) => {
                 //Don't write native function
             }
@@ -140,35 +129,11 @@ impl Object {
             },
             //Function
             1 => {
-                //Read next 8 bytes as name length
-                let slice = &bytes[offset..offset + 8];
-                let nlength = u64::from_be_bytes(slice.try_into().unwrap_or_default()) as usize;  
-                offset += 8;
+                let (function, function_offset) = Function::decode_from_bytes(&bytes[1..]);
 
-                //Read name
-                let name = String::from_utf8(Vec::from(&bytes[offset..offset + nlength])).unwrap();
+                offset += function_offset;
 
-                offset += nlength;
-
-                //Read next byte as function arity
-                let arity = &bytes[offset];
-                offset += 1;
-
-                //Read next 8 bytes as chunk length
-                let slice = &bytes[offset..offset + 8];
-                let clength = u64::from_be_bytes(slice.try_into().unwrap_or_default()) as usize;  
-                offset += 8;
-
-                //Read chunk
-                let chunk = Chunk::decode_from_bytes(&bytes[offset..offset + clength]);
-
-                offset += clength;
-
-                (Self::Function(Function {
-                    arity: *arity,
-                    chunk,
-                    func_type: FunctionType::Function(name)
-                }), offset)
+                (Self::Function(function), offset)
             }
             _ => {
                 panic!("Invalid object discriminator {discriminator}.")
@@ -181,7 +146,8 @@ impl Object {
 pub enum FunctionType {
     #[default]
     TopLevel,
-    Function(String)
+    Function(String),
+    Closure(String, usize)
 }
 
 impl FunctionType {
@@ -191,6 +157,36 @@ impl FunctionType {
 
     pub fn is_function(&self) -> bool {
         matches!(self, Self::Function(_))
+    }
+
+    pub fn unwrap_function(&self) -> String {
+        if let Self::Function(n) = self {
+            n.clone()
+        }
+        else {
+            panic!("Not a function!")
+        }
+    }
+
+    pub fn is_closure(&self) -> bool {
+        matches!(self, Self::Closure(_, _))
+    }
+
+    pub fn unwrap_closure(&self) -> (String, usize) {
+        if let Self::Closure(n, i) = self {
+            (n.clone(), *i)
+        }
+        else {
+            panic!("Not a function closure!")
+        }
+    }
+
+    pub fn as_closure(&self) -> Self {
+        match self {
+            FunctionType::TopLevel => FunctionType::Closure("<script>".to_string(), 0),
+            FunctionType::Function(n) => FunctionType::Closure(n.clone(), 0),
+            FunctionType::Closure(_, _) => self.clone()
+        }
     }
 }
 
@@ -206,8 +202,88 @@ impl Function {
         match &self.func_type {
             FunctionType::TopLevel => "<script>".to_string(),
             FunctionType::Function(name) => name.clone(),
+            FunctionType::Closure(name, _) => name.clone(),
         }
     }
+
+    pub fn encode_as_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = Vec::new();
+
+        //Push length of name
+        let nbytes = self.name().into_bytes();
+        bytes.extend((nbytes.len() as u64).to_be_bytes());
+
+        //Push name
+        bytes.extend(nbytes);
+
+        //Push number of arguments
+        bytes.push(self.arity);
+
+        //Encode chunk
+        let chunk_bytes = self.chunk.encode_as_bytes();
+
+        //Push chunk length
+        bytes.extend((chunk_bytes.len() as u64).to_be_bytes());
+
+        //Push chunk
+        bytes.extend(chunk_bytes);
+
+        bytes
+    }
+
+    pub fn decode_from_bytes(bytes: &[u8]) -> (Self, usize) {
+        let mut offset = 0;
+
+        //Read next 8 bytes as name length
+        let slice = &bytes[offset..offset + 8];
+        let nlength = u64::from_be_bytes(slice.try_into().unwrap_or_default()) as usize;  
+        offset += 8;
+
+        //Read name
+        let name = String::from_utf8(Vec::from(&bytes[offset..offset + nlength])).unwrap();
+
+        offset += nlength;
+
+        //Read next byte as function arity
+        let arity = &bytes[offset];
+        offset += 1;
+
+        //Read next 8 bytes as chunk length
+        let slice = &bytes[offset..offset + 8];
+        let clength = u64::from_be_bytes(slice.try_into().unwrap_or_default()) as usize;  
+        offset += 8;
+
+        //Read chunk
+        let chunk = Chunk::decode_from_bytes(&bytes[offset..offset + clength]);
+
+        offset += clength;
+
+        (Function {
+            arity: *arity,
+            chunk,
+            func_type: FunctionType::Function(name)
+        }, offset)
+    }
+
+    pub fn convert_to_closure(&mut self) {
+        if self.func_type.is_closure() {
+            return;
+        }
+
+        self.func_type = self.func_type.as_closure();
+    }
+
+    pub fn add_upval(&mut self) -> usize {
+        if !self.func_type.is_closure() {
+            return 0;
+        }
+
+        let (name, upvals) = self.func_type.unwrap_closure();
+        self.func_type = FunctionType::Closure(name, upvals + 1);
+
+        upvals + 1
+    }
+    
 }
 
 pub type NativeFunction = fn(args: Vec<Value>, line: usize) -> Result<Value, GreyscaleError>;

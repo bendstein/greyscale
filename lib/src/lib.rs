@@ -30,8 +30,8 @@ pub mod constants {
                                               //| TRACE_LEXER
                                               //| TRACE_PARSER
                                               //| TRACE_VM
-                                              //| TRACE_OUTPUT_PARSE_TREE
-                                              //| TRACE_OUTPUT_COMPILED
+                                              | TRACE_OUTPUT_PARSE_TREE
+                                              | TRACE_OUTPUT_COMPILED
                                               //| TRACE_OUTPUT_INPUT
                                               //| TRACE_BENCHMARK
                                               ;

@@ -1,14 +1,21 @@
-func fib(n) {
-    if n < 2 {
-        return n;
+{
+    let b = 'b';
+    let c = 'c';
+    func x(a) {
+        println(c);
+
+        func y() {
+            func z(a, b, c) {
+                println(c);
+                println(`{a}{b}`);
+            }
+
+            z(a, b, c);
+        }
+
+        return y;
     }
-    return fib(n - 2) + fib(n - 1);
+
+    let a = x('a');
+    a();
 }
-
-let start = time();
-
-println('Fib start');
-
-println(`{fib(30)}`);
-
-println(`{time() - start} ms`);
