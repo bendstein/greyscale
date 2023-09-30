@@ -18,6 +18,14 @@ pub struct VirtualMachine {
     settings: VMSettings,
 }
 
+#[derive(Default, Debug)]
+pub struct VirtualMachineState {
+    stack: Vec<Value>,
+    globals: HashMap<String, Value>,
+    frames: Vec<CallFrame>,
+    settings: VMSettings,
+}
+
 impl VirtualMachine {
     pub fn new(chunk: Chunk) -> Result<Self, GreyscaleError> {
         Self::new_with_settings(chunk, VMSettings::default())
@@ -53,6 +61,23 @@ impl VirtualMachine {
             frames: Vec::new(),
             settings
         }
+    }
+
+    pub fn get_state(&self) -> VirtualMachineState {
+        VirtualMachineState {
+            stack: self.stack.clone(),
+            globals: self.globals.clone(),
+            frames: self.frames.clone(),
+            settings: self.settings
+        }
+    }
+
+    pub fn with_state(mut self, state: VirtualMachineState) -> Self {
+        self.stack = state.stack;
+        self.globals = state.globals;
+        self.frames = state.frames;
+        self.settings = state.settings;
+        self
     }
 
     pub fn register_natives(mut self, natives: Vec<Native>) -> Self {
@@ -1114,8 +1139,12 @@ impl VirtualMachine {
         self.stack.pop()
     }
 
-    fn pop_n_value(&mut self, n: usize) {
+    pub fn pop_n_value(&mut self, n: usize) {
         self.stack.truncate(self.stack.len().saturating_sub(n))
+    }
+
+    pub fn flush_stack(&mut self) {
+        self.stack.clear()
     }
 
     pub fn is_at_end(&self) -> bool {

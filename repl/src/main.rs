@@ -1,6 +1,6 @@
-use std::{fs::File, io::{Read, Write}, time::{Duration, Instant, SystemTime}, rc::Rc};
+use std::{io::Write, time::{Duration, SystemTime}, rc::Rc};
 
-use greyscale::{vm::{VirtualMachine, error::GreyscaleError, settings::VMSettings}, constants, parser::{Parser, settings::ParserSettings}, compiler::{Compiler, CompilerState}, chunk::Chunk, value::{object::Native, Value}};
+use greyscale::{vm::{VirtualMachine, error::GreyscaleError, settings::VMSettings}, parser::{Parser, settings::ParserSettings, ast::AST}, compiler::{Compiler, CompilerState}, value::object::Native};
 use unicode_segmentation::UnicodeSegmentation;
 
 const START_MSG: &str = "Welcome to the Greyscale REPL. Enter the expression to evaluate:";
@@ -146,7 +146,7 @@ fn main() {
         }
     ]);
 
-    println!("{START_MSG}");
+    println!("\x1B[2J\x1B[1;1H{START_MSG}");
 
     loop {
         //Display prompt
@@ -187,49 +187,74 @@ fn main() {
         }
     
         let parsed = parse_result.unwrap();
+        let ast_len = parsed.statements.len();
 
-        //Compile the AST into bytecode
-        let mut compiler = Compiler::default().with_state(compiler_state.clone());
-        let compile_result = compiler.compile_ast_notreturn(Rc::clone(&rc_graphemes), parsed);
-    
-        if let Err(compile_err) = &compile_result {
-            eprintln!("{}", handle_err(compile_err.clone()));
-            continue;
-        }
-    
-        let compiled = compile_result.unwrap();
+        let prev_vm_state = vm.get_state();
+        let mut prev_compiler_state = compiler_state.clone();
+        let mut success = true;
 
-        //Assign chunk to VM
-        _ = vm.swap_chunk(compiled.chunk);
+        //Compile and execute each statement
+        for (index, statement) in parsed.statements.into_iter().enumerate() {
+            //Create an AST with only this statement
+            let stmt_ast = AST::new(vec![statement]);
 
-        let vm_result = if args.contains(&"/debug".to_string()) {
-            vm_step_through(&mut vm, !args.contains(&"/auto".to_string()))
-                .map_err(|e| {
-                    let message = handle_err(e);
-                    format!("{message}\n{}", vm.get_call_stack_trace())
-                })
-        }
-        else {
-            vm.execute()
-                .map_err(|e| {
-                    let message = handle_err(e);
-                    format!("{message}\n{}", vm.get_call_stack_trace())
-                })
-        };
+            //Compile the statement into bytecode
+            let mut compiler = Compiler::default().with_state(prev_compiler_state.clone());
+            let compile_result = compiler.compile_ast_notreturn(Rc::clone(&rc_graphemes), stmt_ast);
 
-        if let Err(msg) = vm_result {
-            eprintln!("{msg}");
-            continue;
-        }
-
-        if let Some(rv) = vm.pop_value() {
-            if !rv.is_void() {
-                println!("{rv}");
+            if let Err(compile_err) = &compile_result {
+                eprintln!("{}", handle_err(compile_err.clone()));
+                break;
             }
+
+            let compiled = compile_result.unwrap().chunk;
+
+            //Assign chunk to VM
+            _ = vm.swap_chunk(compiled);
+
+            let vm_result = if args.contains(&"/debug".to_string()) {
+                vm_step_through(&mut vm, !args.contains(&"/auto".to_string()))
+                    .map_err(|e| {
+                        let message = handle_err(e);
+                        format!("{message}\n{}", vm.get_call_stack_trace())
+                    })
+            }
+            else {
+                vm.execute()
+                    .map_err(|e| {
+                        let message = handle_err(e);
+                        format!("{message}\n{}", vm.get_call_stack_trace())
+                    })
+            };
+    
+            if let Err(msg) = vm_result {
+                eprintln!("{msg}");
+                success = false;
+                break;
+            }
+    
+            if index == ast_len - 1 {
+                if let Some(rv) = vm.pop_value() {
+                    if !rv.is_void() {
+                        println!("{rv}");
+                    }
+                }
+
+                vm.flush_stack();
+            }
+    
+            //Record state of compiler on success
+            prev_compiler_state = compiler.get_state();
         }
 
         //Record state of compiler on success
-        compiler_state = compiler.get_state();
+        if success {
+            compiler_state = prev_compiler_state;
+        }
+        //Rollback VM state on failure
+        else {
+            vm = vm.with_state(prev_vm_state);
+        }
     }
 }
 
