@@ -677,7 +677,13 @@ impl<'a> Compiler<'a> {
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
             let len = self.locals.last().unwrap().len();
 
-            if len < u8::MAX as usize {
+            if len == 0_usize { 
+                
+            }
+            else if len == 1_usize {
+                self.target.chunk.write(ops::OP_POP, end_loc.line);
+            }
+            else if len < u8::MAX as usize {
                 self.target.chunk.write(ops::OP_POP_N, end_loc.line);
                 self.target.chunk.write(len as u8, end_loc.line);
             }
@@ -932,7 +938,13 @@ impl<'a> Compiler<'a> {
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
             let len = self.locals.last().unwrap().len();
 
-            if len < u8::MAX as usize {
+            if len == 0_usize { 
+                
+            }
+            else if len == 1_usize {
+                self.target.chunk.write(ops::OP_POP, end_loc.line);
+            }
+            else if len < u8::MAX as usize {
                 self.target.chunk.write(ops::OP_POP_N, end_loc.line);
                 self.target.chunk.write(len as u8, end_loc.line);
             }
@@ -969,20 +981,26 @@ impl<'a> Compiler<'a> {
                 let found = found.unwrap();
 
                 //On continue or break, pop local scope
-                while !self.locals.is_empty() && self.locals.len() > found.depth {
-                    let len = self.locals.last().unwrap().len();
+                // while !self.locals.is_empty() && self.locals.len() > found.depth {
+                //     let len = self.locals.last().unwrap().len();
 
-                    if len < u8::MAX as usize {
-                        self.target.chunk.write(ops::OP_POP_N, loc.line);
-                        self.target.chunk.write(len as u8, loc.line);
-                    }
-                    else {
-                        self.target.chunk.write(ops::OP_POP_N_LONG, loc.line);
-                        self.target.chunk.write_u16(len as u16, loc.line);
-                    }
+                //     if len == 0_usize { 
+                
+                //     }
+                //     else if len == 1_usize {
+                //         self.target.chunk.write(ops::OP_POP, loc.line);
+                //     }
+                //     else if len < u8::MAX as usize {
+                //         self.target.chunk.write(ops::OP_POP_N, loc.line);
+                //         self.target.chunk.write(len as u8, loc.line);
+                //     }
+                //     else {
+                //         self.target.chunk.write(ops::OP_POP_N_LONG, loc.line);
+                //         self.target.chunk.write_u16(len as u16, loc.line);
+                //     }
                     
-                    self.locals.pop();
-                }
+                //     self.locals.pop();
+                // }
 
                 //On continue, jump to before condition
                 if let TokenType::Continue = token_type {

@@ -1,6 +1,6 @@
 use std::{rc::Rc, collections::HashMap};
 
-use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location};
+use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location, parser::ast::expression::Call};
 
 use self::{error::GreyscaleError, settings::VMSettings, frame::CallFrame};
 
@@ -44,6 +44,15 @@ impl VirtualMachine {
         s.push_value(Value::Object(Rc::new(Object::Function(function))))?;
 
         Ok(s)
+    }
+
+    pub fn default_with_settings(settings: VMSettings) -> Self {
+        Self {
+            stack: Vec::new(),
+            globals: HashMap::new(),
+            frames: Vec::new(),
+            settings
+        }
     }
 
     pub fn register_natives(mut self, natives: Vec<Native>) -> Self {
@@ -1210,6 +1219,31 @@ impl VirtualMachine {
             None => 0_usize,
             Some(f) => f.ip
         }
+    }
+
+    pub fn swap_chunk(&mut self, chunk: Chunk) -> Vec<CallFrame> {
+        let prev = self.frames.clone();
+
+        let stack_offset = if let Some(last) = prev.last() {
+            last.stack_offset
+        }
+        else {
+            0
+        };
+
+        let function = Function {
+            arity: 0,
+            chunk,
+            func_type: FunctionType::TopLevel
+        };
+
+        self.frames = vec![ CallFrame {
+            function,
+            ip: 0,
+            stack_offset
+        }];
+
+        prev
     }
 
     fn advance_ip(&mut self, n: isize) {

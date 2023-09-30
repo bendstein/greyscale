@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/target/debug/interpreter.exe",
             "preLaunchTask": "rust: cargo build",
             "args": [
-                "C:\\Users\\benjo\\Documents\\repos\\rust\\greyscale\\programs\\test1.grs",
+                "C:\\Users\\benjo\\Documents\\repos\\rust\\greyscale\\programs\\test2.grs",
                 "/debug"
             ],
             "stopAtEntry": false,

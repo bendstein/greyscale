@@ -78,6 +78,7 @@ name = "repl"
 version = "0.0.1"
 dependencies = [
  "greyscale",
+ "unicode-segmentation",
 ]
 
 [[package]]
