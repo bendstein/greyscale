@@ -1,6 +1,6 @@
 use std::{fs::File, io::{Read, Write}, time::{Duration, Instant, SystemTime}, rc::Rc};
 
-use greyscale::{vm::{VirtualMachine, error::GreyscaleError, settings::VMSettings}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk, value::{object::Native, Value}};
+use greyscale::{vm::{VirtualMachine, error::GreyscaleError, settings::VMSettings}, constants, parser::{Parser, settings::ParserSettings}, compiler::{Compiler, CompilerState}, chunk::Chunk, value::{object::Native, Value}};
 use unicode_segmentation::UnicodeSegmentation;
 
 const START_MSG: &str = "Welcome to the Greyscale REPL. Enter the expression to evaluate:";
@@ -10,6 +10,9 @@ fn main() {
     let args: Vec<String> = std::env::args()
         .skip(1)
         .collect();
+
+    //Initialize compiler state
+    let mut compiler_state = CompilerState::default();
 
     //Initialize VM
     let mut vm = VirtualMachine::default_with_settings(VMSettings {
@@ -186,7 +189,8 @@ fn main() {
         let parsed = parse_result.unwrap();
 
         //Compile the AST into bytecode
-        let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
+        let mut compiler = Compiler::default().with_state(compiler_state.clone());
+        let compile_result = compiler.compile_ast_notreturn(Rc::clone(&rc_graphemes), parsed);
     
         if let Err(compile_err) = &compile_result {
             eprintln!("{}", handle_err(compile_err.clone()));
@@ -217,6 +221,15 @@ fn main() {
             eprintln!("{msg}");
             continue;
         }
+
+        if let Some(rv) = vm.pop_value() {
+            if !rv.is_void() {
+                println!("{rv}");
+            }
+        }
+
+        //Record state of compiler on success
+        compiler_state = compiler.get_state();
     }
 }
 

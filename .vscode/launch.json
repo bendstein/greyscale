@@ -8,7 +8,7 @@
             "name": "Console",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/interpreter.exe",
+            "program": "${workspaceFolder}/target/debug/repl.exe",
             "preLaunchTask": "rust: cargo build",
             "args": [
                 "C:\\Users\\benjo\\Documents\\repos\\rust\\greyscale\\programs\\test2.grs",

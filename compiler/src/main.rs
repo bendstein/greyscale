@@ -54,7 +54,7 @@ fn main() -> Result<(), String> {
         println!("{formatted_parsed}");
     }
 
-    let compile_result = Compiler::compile_ast(Rc::clone(&rc_graphemes), parsed);
+    let compile_result = Compiler::default().compile_ast(Rc::clone(&rc_graphemes), parsed);
 
     if let Err(compile_err) = &compile_result {
         return Err(handle_err(compile_err.clone()));

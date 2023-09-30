@@ -1110,7 +1110,7 @@ impl VirtualMachine {
         Ok(())
     }
 
-    fn pop_value(&mut self) -> Option<Value> {
+    pub fn pop_value(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
@@ -1224,11 +1224,11 @@ impl VirtualMachine {
     pub fn swap_chunk(&mut self, chunk: Chunk) -> Vec<CallFrame> {
         let prev = self.frames.clone();
 
-        let stack_offset = if let Some(last) = prev.last() {
-            last.stack_offset
+        let (ip, stack_offset) = if let Some(last) = prev.last() {
+            (last.ip, last.stack_offset)
         }
         else {
-            0
+            (0, 0)
         };
 
         let function = Function {
@@ -1239,7 +1239,7 @@ impl VirtualMachine {
 
         self.frames = vec![ CallFrame {
             function,
-            ip: 0,
+            ip,
             stack_offset
         }];
 

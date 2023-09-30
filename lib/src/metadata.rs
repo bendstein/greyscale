@@ -115,4 +115,8 @@ impl Metadata {
             newlines
         }
     }
+
+    pub fn newlines(&self) -> &Vec<(usize, usize)> {
+        &self.newlines
+    }
 }

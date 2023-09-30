@@ -43,6 +43,7 @@ pub struct Controllable {
     pub patch_end: usize
 }
 
+#[derive(Debug)]
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
@@ -52,10 +53,17 @@ pub struct Compiler<'a> {
     controllables: Vec<Controllable>
 }
 
-impl<'a> Compiler<'a> {
-    pub fn compile_ast(program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+#[derive(Debug, Default, PartialEq, PartialOrd, Clone)]
+pub struct CompilerState {
+    constants: Values,
+    locals: Vec<Vec<String>>,
+    target: Function
+}
+
+impl<'a> Default for Compiler<'a> {
+    fn default() -> Self {
         let mut compiler = Self {
-            program: Rc::clone(&program),
+            program: Rc::from(Vec::new()),
             errors: Vec::new(),
             target: Function::default(),
             constants: Values::default(),
@@ -65,6 +73,42 @@ impl<'a> Compiler<'a> {
 
         //Claim locals slot 0 for internal use
         compiler.locals.push(vec![String::new()]);
+
+        compiler
+    }
+}
+
+impl<'a> Compiler<'a> {
+    pub fn with_state(mut self, state: CompilerState) -> Self {
+        self.constants = state.constants;
+        self.locals = state.locals;
+        self.target = state.target;
+        self
+    }
+
+    pub fn get_state(&self) -> CompilerState {
+        CompilerState {
+            constants: self.constants.clone(),
+            locals: self.locals.clone(),
+            target: self.target.clone()
+        }
+    }
+
+    pub fn compile_ast(&mut self, program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
+
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
 
         let mut last_location = Location::new(0, 0);
 
@@ -72,51 +116,93 @@ impl<'a> Compiler<'a> {
             match statement {
                 crate::parser::ast::Node::Expression(n) => {
                     last_location = n.location();
-                    compiler.expr(*n)
+                    self.expr(*n)
                 },
                 crate::parser::ast::Node::Statement(n) => {
                     last_location = n.end_location();
-                    compiler.stmt(*n)
+                    self.stmt(*n)
                 },
             }
         }
 
         //Push return void
-        compiler.expr_literal(Literal {
+        self.expr_literal(Literal {
             value: LiteralType::Void
         }, last_location);
         
         //Push return keyword
-        compiler.target.chunk.write(ops::OP_RETURN, last_location.line);
+        self.target.chunk.write(ops::OP_RETURN, last_location.line);
 
-        if compiler.errors.is_empty() {
-            Ok(compiler.target)
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
         }
         else {
-            Err(GreyscaleError::AggregateErr(compiler.errors))
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
         }
     }
 
-    pub fn compile_expression(program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Function, GreyscaleError> {
-        let mut compiler = Self {
-            program: Rc::clone(&program),
-            errors: Vec::new(),
-            target: Function::default(),
-            constants: Values::default(),
-            locals: Vec::new(),
-            controllables: Vec::new()
-        };
-        
-        //Claim locals slot 0 for internal use
-        compiler.locals.push(vec![String::new()]);
+    pub fn compile_ast_notreturn(&mut self, program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
 
-        compiler.expr(expression);
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
 
-        if compiler.errors.is_empty() {
-            Ok(compiler.target)
+        let mut last_location = Location::new(0, 0);
+
+        for statement in ast.statements {
+            match statement {
+                crate::parser::ast::Node::Expression(n) => {
+                    last_location = n.location();
+                    self.expr(*n)
+                },
+                crate::parser::ast::Node::Statement(n) => {
+                    last_location = n.end_location();
+                    self.stmt(*n)
+                },
+            }
+        }
+
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
         }
         else {
-            Err(GreyscaleError::AggregateErr(compiler.errors))
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
+        }
+    }
+
+    pub fn compile_expression(&mut self, program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
+        
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
+
+        self.expr(expression);
+
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
+        }
+        else {
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
         }
     }
 

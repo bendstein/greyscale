@@ -29,7 +29,11 @@ impl Object {
                     format!("_{}", f.arity)
                 }, f.name())
             },
-            Object::NativeFunction(n) => n.name.clone()
+            Object::NativeFunction(n) => format!("<native_fn{} {}>", if n.arity == 0 {
+                "".to_string()
+            } else {
+                format!("_{}", n.arity)
+            }, n.name.clone())
         }
     }
 
