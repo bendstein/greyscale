@@ -173,6 +173,10 @@ fn main() {
 
         input = String::from(input.trim_end());
 
+        if (greyscale::constants::TRACE & greyscale::constants::TRACE_OUTPUT_INPUT) == greyscale::constants::TRACE_OUTPUT_INPUT {
+            println!("Program: {input}");
+        }
+
         //Break input into graphemes and lex/parse it
         let graphemes = input.graphemes(true).collect::<Vec<&str>>();
         let rc_graphemes: Rc<Vec<&str>> = Rc::from(graphemes);
@@ -187,6 +191,12 @@ fn main() {
         }
     
         let parsed = parse_result.unwrap();
+
+        if (greyscale::constants::TRACE & greyscale::constants::TRACE_OUTPUT_PARSE_TREE) == greyscale::constants::TRACE_OUTPUT_PARSE_TREE {
+            let formatted_parsed = parsed.debug_string(Rc::clone(&rc_graphemes));
+            println!("{formatted_parsed}");
+        }
+
         let ast_len = parsed.statements.len();
 
         let prev_vm_state = vm.get_state();
