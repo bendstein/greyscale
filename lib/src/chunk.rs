@@ -1,7 +1,7 @@
 pub mod disassemble;
 
 use std::{slice::SliceIndex, ops::{Index, IndexMut}, fmt::Display};
-use crate::{value::{Values, Value}, metadata::Metadata};
+use crate::{value::{Values, Value, ValuesIter}, metadata::Metadata};
 
 #[derive(Default, Debug, PartialEq, PartialOrd, Clone)]
 pub struct Chunk {
@@ -12,6 +12,18 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    pub fn append(&mut self, chunk: &Chunk) {
+        for c in &chunk.code {
+            self.code.push(*c);
+        }
+        for c in ValuesIter::from(&chunk.constants) {
+            self.constants.write(c.clone());
+        }
+        for m in chunk.metadata.newlines() {
+            self.metadata.new_line(m.0, m.1);
+        }
+    }
+
     pub fn write(&mut self, code: u8, line: usize) {
         self.metadata.new_line(self.count(), line);
         self.code.push(code);

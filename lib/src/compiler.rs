@@ -43,43 +43,72 @@ pub struct Controllable {
     pub patch_end: usize
 }
 
-#[derive(Debug, Default, PartialEq, Eq, PartialOrd, Ord, Clone)]
-pub struct Upvalue {
-    pub index: usize,
-    pub is_local: bool,
-    pub name: String
-}
-
+#[derive(Debug)]
 pub struct Compiler<'a> {
     program: Rc<Vec<&'a str>>,
     errors: Vec<GreyscaleError>,
     target: Function,
     constants: Values,
     locals: Vec<Vec<String>>,
-    upvals: Vec<Upvalue>,
-    enclosing_locals: Option<Vec<Vec<String>>>,
-    parent_enclosing_locals: Option<Vec<Vec<String>>>,
-    enclosing_upvals: Vec<Upvalue>,
     controllables: Vec<Controllable>
 }
 
-impl<'a> Compiler<'a> {
-    pub fn compile_ast(program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+#[derive(Debug, Default, PartialEq, PartialOrd, Clone)]
+pub struct CompilerState {
+    constants: Values,
+    locals: Vec<Vec<String>>,
+    target: Function
+}
+
+impl<'a> Default for Compiler<'a> {
+    fn default() -> Self {
         let mut compiler = Self {
-            program: Rc::clone(&program),
+            program: Rc::from(Vec::new()),
             errors: Vec::new(),
             target: Function::default(),
             constants: Values::default(),
             locals: Vec::new(),
-            upvals: Vec::new(),
-            enclosing_locals: None,
-            parent_enclosing_locals: None,
-            enclosing_upvals: Vec::new(),
             controllables: Vec::new()
         };
 
         //Claim locals slot 0 for internal use
         compiler.locals.push(vec![String::new()]);
+
+        compiler
+    }
+}
+
+impl<'a> Compiler<'a> {
+    pub fn with_state(mut self, state: CompilerState) -> Self {
+        self.constants = state.constants;
+        self.locals = state.locals;
+        self.target = state.target;
+        self
+    }
+
+    pub fn get_state(&self) -> CompilerState {
+        CompilerState {
+            constants: self.constants.clone(),
+            locals: self.locals.clone(),
+            target: self.target.clone()
+        }
+    }
+
+    pub fn compile_ast(&mut self, program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
+
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
 
         let mut last_location = Location::new(0, 0);
 
@@ -87,55 +116,93 @@ impl<'a> Compiler<'a> {
             match statement {
                 crate::parser::ast::Node::Expression(n) => {
                     last_location = n.location();
-                    compiler.expr(*n)
+                    self.expr(*n)
                 },
                 crate::parser::ast::Node::Statement(n) => {
                     last_location = n.end_location();
-                    compiler.stmt(*n)
+                    self.stmt(*n)
                 },
             }
         }
 
         //Push return void
-        compiler.expr_literal(Literal {
+        self.expr_literal(Literal {
             value: LiteralType::Void
         }, last_location);
         
         //Push return keyword
-        compiler.target.chunk.write(ops::OP_RETURN, last_location.line);
+        self.target.chunk.write(ops::OP_RETURN, last_location.line);
 
-        if compiler.errors.is_empty() {
-            Ok(compiler.target)
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
         }
         else {
-            Err(GreyscaleError::AggregateErr(compiler.errors))
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
         }
     }
 
-    pub fn compile_expression(program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Function, GreyscaleError> {
-        let mut compiler = Self {
-            program: Rc::clone(&program),
-            errors: Vec::new(),
-            target: Function::default(),
-            constants: Values::default(),
-            locals: Vec::new(),
-            upvals: Vec::new(),
-            parent_enclosing_locals: None,
-            enclosing_locals: None,
-            enclosing_upvals: Vec::new(),
-            controllables: Vec::new()
-        };
-        
-        //Claim locals slot 0 for internal use
-        compiler.locals.push(vec![String::new()]);
+    pub fn compile_ast_notreturn(&mut self, program: Rc<Vec<&'a str>>, ast: AST) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
 
-        compiler.expr(expression);
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
 
-        if compiler.errors.is_empty() {
-            Ok(compiler.target)
+        let mut last_location = Location::new(0, 0);
+
+        for statement in ast.statements {
+            match statement {
+                crate::parser::ast::Node::Expression(n) => {
+                    last_location = n.location();
+                    self.expr(*n)
+                },
+                crate::parser::ast::Node::Statement(n) => {
+                    last_location = n.end_location();
+                    self.stmt(*n)
+                },
+            }
+        }
+
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
         }
         else {
-            Err(GreyscaleError::AggregateErr(compiler.errors))
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
+        }
+    }
+
+    pub fn compile_expression(&mut self, program: Rc<Vec<&'a str>>, expression: ExprNode) -> Result<Function, GreyscaleError> {
+        self.program = Rc::clone(&program);
+        self.errors = Vec::new();
+        self.controllables = Vec::new();
+        // let mut compiler = Self {
+        //     program: Rc::clone(&program),
+        //     errors: Vec::new(),
+        //     target: Function::default(),
+        //     constants: Values::default(),
+        //     locals: Vec::new(),
+        //     controllables: Vec::new()
+        // };
+        
+        // //Claim locals slot 0 for internal use
+        // compiler.locals.push(vec![String::new()]);
+
+        self.expr(expression);
+
+        if self.errors.is_empty() {
+            Ok(self.target.clone())
+        }
+        else {
+            Err(GreyscaleError::AggregateErr(self.errors.clone()))
         }
     }
 
@@ -276,9 +343,9 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn resolve_local(locals: &[Vec<String>], name: &str) -> Option<usize> {
-        for i in (0..locals.len()).rev() {
-            let scope = &locals[i];
+    fn resolve_local(&self, name: &str) -> Option<usize> {
+        for i in (0..self.locals.len()).rev() {
+            let scope = &self.locals[i];
 
             for j in (0..scope.len()).rev() {
                 let elem = &scope[j];
@@ -286,8 +353,8 @@ impl<'a> Compiler<'a> {
                 if elem == name {
                     let mut position = j;
 
-                    for item in locals.iter().take(i) {
-                        position += item.len();
+                    for x in 0..i {
+                        position += self.locals[x].len();
                     }
 
                     return Some(position);
@@ -296,60 +363,6 @@ impl<'a> Compiler<'a> {
         }
         
         None
-    }
-
-    fn resolve_upval(&mut self, name: &str) -> Option<usize> {
-        if let Some(enclosing) = &self.enclosing_locals {
-            let index = Self::resolve_local(enclosing, name);
-
-            if let Some(local) = index {
-                //Add the upvalue and return its index
-                return Some(self.add_upval(name.to_string(), local, true));
-            }
-        }
-
-        //Check parent's context
-        if let Some(enclosing) = &self.parent_enclosing_locals {
-            let index = Self::resolve_local(enclosing, name);
-
-            if let Some(local) = index {
-                //Add the upvalue and return its index
-                return Some(self.add_upval(name.to_string(), local, false));
-            }
-        }
-
-        None
-    }
-
-    fn add_upval(&mut self, name: String, index: usize, is_local: bool) -> usize {
-        //Convert the current target to a closure
-        self.target.convert_to_closure();
-
-        //Make sure current upval doesn't already exist
-        for upval in &self.upvals {
-            if upval.index == index && upval.is_local == is_local {
-                return upval.index;
-            }
-        }
-
-        let mut on_parent = false;
-
-        //Make sure current upval doesn't exist on paren
-        for upval in &self.enclosing_upvals {
-            if upval.index == index {
-                on_parent = true;
-                break;
-            }
-        }
-
-        //Create upval and increment target captured count
-        self.upvals.push(Upvalue {
-            index,
-            is_local: !on_parent && is_local,
-            name
-        });
-
-        self.target.add_upval()
     }
 
 }
@@ -501,12 +514,8 @@ impl<'a> Compiler<'a> {
             let content = (&self.program)[range.clone()].join("");
 
             //If id is a local
-            if let Some(index) = Self::resolve_local(&self.locals, &content) {
+            if let Some(index) = self.resolve_local(&content) {
                 self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
-            }
-            //If id is an upvalue
-            else if let Some(index) = self.resolve_upval(&content) {
-                self.push_local(ops::OP_GET_UPVAL, ops::OP_GET_UPVAL_LONG, index, location);
             }
             //If it's global or undefined
             else {
@@ -550,17 +559,6 @@ impl<'a> Compiler<'a> {
             },
             constants: self.constants.clone(),
             locals: vec![ vec![ name ] ],
-            upvals: Vec::new(),
-            parent_enclosing_locals: if let Some(enclosing_locals) = &self.parent_enclosing_locals {
-                let mut enclosing = enclosing_locals.clone();
-                enclosing.extend(self.locals.clone());
-                Some(enclosing)
-            }
-            else {
-                Some(self.locals.clone())
-            },
-            enclosing_locals: Some(self.locals.clone()),
-            enclosing_upvals: self.upvals.clone(),
             controllables: Vec::new(),
         };
 
@@ -607,45 +605,8 @@ impl<'a> Compiler<'a> {
         }
 
         //Write function
-        let is_closure = func_compiler.target.func_type.is_closure();
-
-        //For any non-local upvalues, add them to this as well
-        let inner_upvals: Vec<&Upvalue> = func_compiler.upvals.iter()
-            .filter(|u| !u.is_local)
-            .collect();
-
-        if !inner_upvals.is_empty() {
-            for uv in inner_upvals {
-                self.resolve_upval(&uv.name); 
-            }
-        }
-
         let value = Value::Object(Rc::new(Object::Function(func_compiler.target)));
-
-        //If function is closure, push as closure
-        if is_closure {
-
-            self.push_const(ops::OP_CLOSURE, ops::OP_CLOSURE_LONG, value, loc);
-
-            //Emit upvals
-            for upval in func_compiler.upvals {
-                if upval.index < u8::MAX as usize {
-                    self.target.chunk.write(u8::from(upval.is_local), loc.line); //1 or 0
-                    self.target.chunk.write(upval.index as u8, loc.line);
-                }
-                else if upval.index < u16::MAX as usize {
-                    self.target.chunk.write(u8::from(upval.is_local) + 2, loc.line); //3 or 2
-                    self.target.chunk.write_u16(upval.index as u16, loc.line);
-                }
-                else {
-                    self.errors.push(GreyscaleError::CompileErr(format!("Closure cannot capture more than {} variables.", u16::MAX), loc));
-                }
-            }
-        }
-        //Otherwise, push as constant
-        else {
-            self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, loc);
-        }
+        self.push_const(ops::OP_CONSTANT, ops::OP_CONSTANT_LONG, value, loc);
     }
 
     fn expr_assign(&mut self, expr: expr::Assignment, location: Location) {
@@ -662,12 +623,7 @@ impl<'a> Compiler<'a> {
             return;
         };
 
-        let id_index = Self::resolve_local(&self.locals, &id);
-        let upval_index = if id_index.is_none() {
-            self.resolve_upval(&id) 
-        } else {
-            None
-        };
+        let id_index = self.resolve_local(&id);
 
         let id_rc = Rc::new(Object::String(id));
 
@@ -703,11 +659,6 @@ impl<'a> Compiler<'a> {
                 //Push local slot
                 self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
             }
-            //If id is an upvalue
-            else if let Some(index) = upval_index {
-                //Push upval
-                self.push_local(ops::OP_GET_UPVAL, ops::OP_GET_UPVAL_LONG, index, location);
-            }
             //If it's a global or undefined
             else {
                 //Push identifier
@@ -728,11 +679,6 @@ impl<'a> Compiler<'a> {
             if let Some(index) = id_index {
                 //Push local slot
                 self.push_local(ops::OP_GET_LOCAL, ops::OP_GET_LOCAL_LONG, index, location);
-            }
-            //If id is an upvalue
-            else if let Some(index) = upval_index {
-                //Push upval
-                self.push_local(ops::OP_GET_UPVAL, ops::OP_GET_UPVAL_LONG, index, location);
             }
             //If it's a global or undefined
             else {
@@ -764,11 +710,6 @@ impl<'a> Compiler<'a> {
         if let Some(index) = id_index {
             //Push local slot
             self.push_local(ops::OP_SET_LOCAL, ops::OP_SET_LOCAL_LONG, index, location);
-        }
-        //If id is a local
-        else if let Some(index) = upval_index {
-            //Push upval
-            self.push_local(ops::OP_SET_UPVAL, ops::OP_SET_UPVAL_LONG, index, location);
         }
         //If it's a global or undefined
         else {
@@ -822,7 +763,13 @@ impl<'a> Compiler<'a> {
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
             let len = self.locals.last().unwrap().len();
 
-            if len < u8::MAX as usize {
+            if len == 0_usize { 
+                
+            }
+            else if len == 1_usize {
+                self.target.chunk.write(ops::OP_POP, end_loc.line);
+            }
+            else if len < u8::MAX as usize {
                 self.target.chunk.write(ops::OP_POP_N, end_loc.line);
                 self.target.chunk.write(len as u8, end_loc.line);
             }
@@ -1077,7 +1024,13 @@ impl<'a> Compiler<'a> {
         while !self.locals.is_empty() && self.locals.len() > initial_scope_depth {
             let len = self.locals.last().unwrap().len();
 
-            if len < u8::MAX as usize {
+            if len == 0_usize { 
+                
+            }
+            else if len == 1_usize {
+                self.target.chunk.write(ops::OP_POP, end_loc.line);
+            }
+            else if len < u8::MAX as usize {
                 self.target.chunk.write(ops::OP_POP_N, end_loc.line);
                 self.target.chunk.write(len as u8, end_loc.line);
             }
@@ -1114,20 +1067,26 @@ impl<'a> Compiler<'a> {
                 let found = found.unwrap();
 
                 //On continue or break, pop local scope
-                while !self.locals.is_empty() && self.locals.len() > found.depth {
-                    let len = self.locals.last().unwrap().len();
+                // while !self.locals.is_empty() && self.locals.len() > found.depth {
+                //     let len = self.locals.last().unwrap().len();
 
-                    if len < u8::MAX as usize {
-                        self.target.chunk.write(ops::OP_POP_N, loc.line);
-                        self.target.chunk.write(len as u8, loc.line);
-                    }
-                    else {
-                        self.target.chunk.write(ops::OP_POP_N_LONG, loc.line);
-                        self.target.chunk.write_u16(len as u16, loc.line);
-                    }
+                //     if len == 0_usize { 
+                
+                //     }
+                //     else if len == 1_usize {
+                //         self.target.chunk.write(ops::OP_POP, loc.line);
+                //     }
+                //     else if len < u8::MAX as usize {
+                //         self.target.chunk.write(ops::OP_POP_N, loc.line);
+                //         self.target.chunk.write(len as u8, loc.line);
+                //     }
+                //     else {
+                //         self.target.chunk.write(ops::OP_POP_N_LONG, loc.line);
+                //         self.target.chunk.write_u16(len as u16, loc.line);
+                //     }
                     
-                    self.locals.pop();
-                }
+                //     self.locals.pop();
+                // }
 
                 //On continue, jump to before condition
                 if let TokenType::Continue = token_type {

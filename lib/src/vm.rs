@@ -1,6 +1,6 @@
 use std::{rc::Rc, collections::HashMap};
 
-use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location};
+use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location, parser::ast::expression::Call};
 
 use self::{error::GreyscaleError, settings::VMSettings, frame::CallFrame};
 
@@ -12,6 +12,14 @@ type GreyscaleResult = std::result::Result<(), GreyscaleError>;
 
 #[derive(Default, Debug)]
 pub struct VirtualMachine {
+    stack: Vec<Value>,
+    globals: HashMap<String, Value>,
+    frames: Vec<CallFrame>,
+    settings: VMSettings,
+}
+
+#[derive(Default, Debug)]
+pub struct VirtualMachineState {
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
     frames: Vec<CallFrame>,
@@ -44,6 +52,32 @@ impl VirtualMachine {
         s.push_value(Value::Object(Rc::new(Object::Function(function))))?;
 
         Ok(s)
+    }
+
+    pub fn default_with_settings(settings: VMSettings) -> Self {
+        Self {
+            stack: Vec::new(),
+            globals: HashMap::new(),
+            frames: Vec::new(),
+            settings
+        }
+    }
+
+    pub fn get_state(&self) -> VirtualMachineState {
+        VirtualMachineState {
+            stack: self.stack.clone(),
+            globals: self.globals.clone(),
+            frames: self.frames.clone(),
+            settings: self.settings
+        }
+    }
+
+    pub fn with_state(mut self, state: VirtualMachineState) -> Self {
+        self.stack = state.stack;
+        self.globals = state.globals;
+        self.frames = state.frames;
+        self.settings = state.settings;
+        self
     }
 
     pub fn register_natives(mut self, natives: Vec<Native>) -> Self {
@@ -1139,12 +1173,16 @@ impl VirtualMachine {
         Ok(())
     }
 
-    fn pop_value(&mut self) -> Option<Value> {
+    pub fn pop_value(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
-    fn pop_n_value(&mut self, n: usize) {
+    pub fn pop_n_value(&mut self, n: usize) {
         self.stack.truncate(self.stack.len().saturating_sub(n))
+    }
+
+    pub fn flush_stack(&mut self) {
+        self.stack.clear()
     }
 
     pub fn is_at_end(&self) -> bool {
@@ -1248,6 +1286,31 @@ impl VirtualMachine {
             None => 0_usize,
             Some(f) => f.ip
         }
+    }
+
+    pub fn swap_chunk(&mut self, chunk: Chunk) -> Vec<CallFrame> {
+        let prev = self.frames.clone();
+
+        let (ip, stack_offset) = if let Some(last) = prev.last() {
+            (last.ip, last.stack_offset)
+        }
+        else {
+            (0, 0)
+        };
+
+        let function = Function {
+            arity: 0,
+            chunk,
+            func_type: FunctionType::TopLevel
+        };
+
+        self.frames = vec![ CallFrame {
+            function,
+            ip,
+            stack_offset
+        }];
+
+        prev
     }
 
     fn advance_ip(&mut self, n: isize) {
