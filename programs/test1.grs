@@ -9,6 +9,6 @@ let start = time();
 
 println('Fib start');
 
-println(`{fib(30)}`);
+println(`{fib(10)}`);
 
 println(`{time() - start} ms`);

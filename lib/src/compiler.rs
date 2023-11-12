@@ -157,16 +157,16 @@ impl<'a> Compiler<'a> {
         // //Claim locals slot 0 for internal use
         // compiler.locals.push(vec![String::new()]);
 
-        let mut last_location = Location::new(0, 0);
+        //let mut last_location = Location::new(0, 0);
 
         for statement in ast.statements {
             match statement {
                 crate::parser::ast::Node::Expression(n) => {
-                    last_location = n.location();
+                    //last_location = n.location();
                     self.expr(*n)
                 },
                 crate::parser::ast::Node::Statement(n) => {
-                    last_location = n.end_location();
+                    //last_location = n.end_location();
                     self.stmt(*n)
                 },
             }

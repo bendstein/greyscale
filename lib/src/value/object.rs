@@ -125,7 +125,7 @@ impl Object {
         bytes
     }
 
-    pub fn decode_from_bytes(bytes: &[u8]) -> (Self, usize) {
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<(Self, usize), String> {
         //Use first byte as discriminator
         let discriminator = bytes[0];
 
@@ -140,7 +140,7 @@ impl Object {
 
                 offset += 8;
 
-                (Self::String(String::from_utf8(Vec::from(&bytes[offset..offset + slength])).unwrap()), offset + slength)
+                Ok((Self::String(String::from_utf8(Vec::from(&bytes[offset..offset + slength])).unwrap()), offset + slength))
             },
             //Function
             1 => {
@@ -164,18 +164,18 @@ impl Object {
                 offset += 8;
 
                 //Read chunk
-                let chunk = Chunk::decode_from_bytes(&bytes[offset..offset + clength]);
+                let chunk = Chunk::decode_from_bytes(&bytes[offset..offset + clength])?;
 
                 offset += clength;
 
-                (Self::Function(Function {
+                Ok((Self::Function(Function {
                     arity: *arity,
                     chunk,
                     func_type: FunctionType::Function(name)
-                }), offset)
+                }), offset))
             }
             _ => {
-                panic!("Invalid object discriminator {discriminator}.")
+                Err(format!("Invalid object discriminator {discriminator}."))
             }
         }
     }

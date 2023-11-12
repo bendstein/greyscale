@@ -17,6 +17,12 @@ pub mod constants {
     pub const MAX_STACK: usize = isize::MAX as usize;
     pub const MAX_FRAMES: usize = u8::MAX as usize;
 
+    lazy_static! {
+        pub static ref BIN_SIGNATURE: &'static str = "GRYSCL";
+    }
+
+    //GRYSCL
+
     pub const TRACE_NONE: u8                = 0b00000000_u8;
     pub const TRACE_LEXER: u8               = 0b00000001_u8;
     pub const TRACE_PARSER: u8              = 0b00000010_u8;

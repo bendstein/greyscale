@@ -98,6 +98,10 @@ impl Chunk {
     pub fn encode_as_bytes(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = Vec::new();
 
+        //Write signature
+        let signature = Vec::from(crate::constants::BIN_SIGNATURE.as_bytes());
+        bytes.extend(signature);
+
         //Encode metadata
         let metadata_bytes = self.metadata.encode_as_bytes();
 
@@ -119,44 +123,99 @@ impl Chunk {
         bytes
     }
 
-    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<Self, String> {
         let mut offset = 0;
+
+        let expected_signature = *crate::constants::BIN_SIGNATURE;
+
+        if bytes.is_empty() || bytes.len() < offset + expected_signature.len() {
+            return Err(String::from("Unexpected EOF"));
+        }
+
+        if !Self::verify_signature(bytes) {
+            return Err(String::from("Invalid signature"));
+        }
+
+        offset += expected_signature.len();
+
+        if bytes.len() < offset + 8 {
+            return Err(String::from("Unexpected EOF"));
+        }
 
         //Get metadata length
         let metadata_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
 
-        offset = 8;
+        offset += 8;
+
+        if bytes.len() < offset + metadata_len {
+            return Err(String::from("Unexpected EOF"));
+        }
 
         //Get metadata
-        let metadata = Metadata::decode_from_bytes(&bytes[offset..metadata_len + offset]);
+        let metadata = Metadata::decode_from_bytes(&bytes[offset..metadata_len + offset])?;
 
         offset += metadata_len;
+
+        if bytes.len() < offset + 8 {
+            return Err(String::from("Unexpected EOF"));
+        }
 
         //Get constants length
         let constants_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
 
         offset += 8;
 
+        if bytes.len() < offset + constants_len {
+            return Err(String::from("Unexpected EOF"));
+        }
+
         //Get constants
-        let constants = Values::decode_from_bytes(&bytes[offset..constants_len + offset]);
+        let constants = Values::decode_from_bytes(&bytes[offset..constants_len + offset])?;
     
         offset += constants_len;
+
+        if bytes.len() < offset + 8 {
+            return Err(String::from("Unexpected EOF"));
+        }
 
         //Get code length
         let code_len = u64::from_be_bytes(bytes[offset..offset + 8].try_into().unwrap_or_default()) as usize;
 
         offset += 8;
 
+        if bytes.len() < offset + code_len {
+            return Err(String::from("Unexpected EOF"));
+        }
+
         //Get code
         let code = Vec::from(&bytes[offset..code_len + offset]);
 
-        Self {
+        Ok(Self {
             code,
             name: None,
             constants,
             metadata
-        }
+        })
     }
+
+    pub fn verify_signature(bytes: &[u8]) -> bool {
+        let expected_signature = *crate::constants::BIN_SIGNATURE;
+
+        if bytes.is_empty() || bytes.len() < expected_signature.len() {
+            return false;
+        }
+
+        let signature = &bytes[0..expected_signature.len()];
+
+        if !signature.is_ascii() {
+            return false;
+        }
+
+        let signature_str = std::str::from_utf8(signature).unwrap();
+
+        signature_str == expected_signature
+    }
+
 }
 
 impl<Idx> Index<Idx> for Chunk

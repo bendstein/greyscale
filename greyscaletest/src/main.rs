@@ -1,5 +1,6 @@
 extern crate unicode_segmentation;
 
+use std::io::Write;
 use std::rc::Rc;
 use std::time::Instant;
 use greyscale::compiler::Compiler;
@@ -54,48 +55,56 @@ fn main() {
 
     let mut compiled = compile_result.unwrap().chunk;
 
-    if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
-        println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
-    }
+    let c = compiled.encode_as_bytes();
 
-    if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
-        compiled.name = Some(String::from("Trace"));
-        println!("{compiled}");
-    }
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .open("test2.bin").unwrap();
 
-    let exec_start = Instant::now();
+    f.write_all(&c).unwrap();
 
-    let vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
-        ignore_final_pop: false
-    });
+    // if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
+    //     println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
+    // }
 
-    if let Err(error) = vm {
-        handle_err(&error);
-        return;
-    }
+    // if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
+    //     compiled.name = Some(String::from("Trace"));
+    //     println!("{compiled}");
+    // }
 
-    let mut vm = vm.unwrap();
+    // let exec_start = Instant::now();
 
-    let execute_result = vm.execute();
+    // let vm = vm::VirtualMachine::new_with_settings(compiled, VMSettings {
+    //     ignore_final_pop: false
+    // });
 
-    if let Err(execute_err) = &execute_result {
-        handle_err(execute_err);
-        return;
-    }
+    // if let Err(error) = vm {
+    //     handle_err(&error);
+    //     return;
+    // }
 
-    if let Some(r) = vm.peek_value() {
-        println!("{r}");
-    }
+    // let mut vm = vm.unwrap();
 
-    if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
-        println!("Finished execution in {}ms", exec_start.elapsed().as_millis());
-    }
+    // let execute_result = vm.execute();
 
-    if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
-        println!("\n--End State--\n");
-        print!("STACK: ");
-        vm.stack_trace();
-    }
+    // if let Err(execute_err) = &execute_result {
+    //     handle_err(execute_err);
+    //     return;
+    // }
+
+    // if let Some(r) = vm.peek_value() {
+    //     println!("{r}");
+    // }
+
+    // if (constants::TRACE & constants::TRACE_BENCHMARK) == constants::TRACE_BENCHMARK {
+    //     println!("Finished execution in {}ms", exec_start.elapsed().as_millis());
+    // }
+
+    // if (constants::TRACE & constants::TRACE_VM) == constants::TRACE_VM {
+    //     println!("\n--End State--\n");
+    //     print!("STACK: ");
+    //     vm.stack_trace();
+    // }
 
 }
 

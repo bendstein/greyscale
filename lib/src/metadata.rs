@@ -93,7 +93,7 @@ impl Metadata {
         bytes
     }
 
-    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<Self, String> {
         let mut newlines: Vec<(usize, usize)> = Vec::new();
 
         //Get newline data length
@@ -111,9 +111,9 @@ impl Metadata {
             newlines.push((a, b));
         }
 
-        Self {
+        Ok(Self {
             newlines
-        }
+        })
     }
 
     pub fn newlines(&self) -> &Vec<(usize, usize)> {

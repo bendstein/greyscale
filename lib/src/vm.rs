@@ -1,6 +1,6 @@
 use std::{rc::Rc, collections::HashMap};
 
-use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location, parser::ast::expression::Call};
+use crate::{chunk::Chunk, ops::Op, value::{Value, object::{Object, Function, FunctionType, Native}}, constants, location::Location};
 
 use self::{error::GreyscaleError, settings::VMSettings, frame::CallFrame};
 

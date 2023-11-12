@@ -1,43 +1,68 @@
-use std::{fs::File, io::Read, time::{Duration, Instant, SystemTime}, rc::Rc};
+use std::{fs::File, io::{Read, Write}, time::{Duration, Instant, SystemTime}, rc::Rc};
 
 use greyscale::{vm::{VirtualMachine, error::GreyscaleError}, constants, parser::{Parser, settings::ParserSettings}, compiler::Compiler, chunk::Chunk, value::object::Native};
 use unicode_segmentation::UnicodeSegmentation;
 
 fn main() -> Result<(), String> {
+    //Set to use virtual terminal so that control characters work on windows
+    _ = colored::control::set_virtual_terminal(true);
+
     let args: Vec<String> = std::env::args()
         .skip(1)
         .collect();
 
-    if args.is_empty() {
-        return Err("Expected a file path.".to_string());
-    }
-
-    let filepath = &args[0];
-
-    let handle_io_err = |err: std::io::Error| {
-        match err.kind() {
-            std::io::ErrorKind::NotFound => format!("Failed to find file at {filepath}"),
-            std::io::ErrorKind::PermissionDenied => format!("You do not have access to read the file at {filepath}"),
-            std::io::ErrorKind::OutOfMemory => format!("Not enough memory to read the file at {filepath}"),
-            _ => format!("Failed to read file at {filepath}"),
+    //If piped input, read program from stdin, otherwise, read from file
+    let input: Vec<u8> = if atty::is(atty::Stream::Stdin) {
+        if args.is_empty() {
+            return Err("Expected a file path.".to_string());
         }
-    };
+    
+        let filepath = &args[0];
+        
+        let handle_io_err = |err: std::io::Error| {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => format!("Failed to find file at {filepath}"),
+                std::io::ErrorKind::PermissionDenied => format!("You do not have access to read the file at {filepath}"),
+                std::io::ErrorKind::OutOfMemory => format!("Not enough memory to read the file at {filepath}"),
+                _ => format!("Failed to read file at {filepath}"),
+            }
+        };
 
-    let mut file = File::open(&args[0])
-        .map_err(handle_io_err)?;
+        let mut file = File::open(&args[0])
+            .map_err(handle_io_err)?;
 
-    let mut compiled = if filepath.to_uppercase().ends_with(".BIN") {
         let mut bytes: Vec<u8> = Vec::new();
 
         let _ = file.read_to_end(&mut bytes)
             .map_err(handle_io_err)?;
 
-        Chunk::decode_from_bytes(&bytes)
+        Ok(bytes)
     }
     else {
-        let mut program: String = String::new();
-        let _ = file.read_to_string(&mut program)
-            .map_err(handle_io_err)?;
+        let handle_io_err = |err: std::io::Error| {
+            match err.kind() {
+                std::io::ErrorKind::NotFound => String::from("Failed to find the requested resource."),
+                std::io::ErrorKind::PermissionDenied => String::from("You do not have access to read the requested resource."),
+                std::io::ErrorKind::OutOfMemory => String::from("Not enough memory to read the requested resource."),
+                _ => String::from("Failed to read the requested resource."),
+            }
+        };
+
+        let bytes: Result<Vec<u8>, std::io::Error> = std::io::stdin()
+            .lock()
+            .bytes()
+            .collect();
+
+        bytes.map_err(handle_io_err)
+    }?;
+
+    //Check if bytes begins with GRYSCL signature
+    let mut compiled = if Chunk::verify_signature(&input) {
+        Chunk::decode_from_bytes(&input)
+    }
+    else {
+        let program = std::str::from_utf8(&input)
+            .map_err(|err| err.to_string())?;
 
         if (constants::TRACE & constants::TRACE_OUTPUT_INPUT) == constants::TRACE_OUTPUT_INPUT {
             println!("Program: {program}");
@@ -75,8 +100,17 @@ fn main() -> Result<(), String> {
             println!("Finished compiling in {}ms", compile_start.elapsed().as_millis());
         }
 
-        compiled.chunk
-    };
+        Ok(compiled.chunk)
+    }?;
+
+    if args.contains(&"/writebin".to_string()) {
+        let encoded = compiled.encode_as_bytes();
+
+        File::create("test2.bin")
+            .expect("Failed to create bin")
+            .write_all(&encoded)
+            .expect("Failed to write bin");
+    }
 
     if (constants::TRACE & constants::TRACE_OUTPUT_COMPILED) == constants::TRACE_OUTPUT_COMPILED {
         compiled.name = Some(String::from("Trace"));

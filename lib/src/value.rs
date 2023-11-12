@@ -171,18 +171,18 @@ impl Value {
         bytes
     }
 
-    pub fn decode_from_bytes(bytes: &[u8]) -> (Self, usize) {
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<(Self, usize), String> {
         //Use first byte as discriminator
         let discriminator = bytes[0];
 
         match discriminator {
             //Null
             0 => {
-                (Self::Null, 1)
+                Ok((Self::Null, 1))
             },
             //Void
             1 => {
-                (Self::Void, 1)
+                Ok((Self::Void, 1))
             },
             //Bool
             2 => {
@@ -190,29 +190,29 @@ impl Value {
                 let value = bytes[1];
 
                 if value == 0 {
-                    (Self::Bool(false), 2)
+                    Ok((Self::Bool(false), 2))
                 }
                 else {
-                    (Self::Bool(true), 2)
+                    Ok((Self::Bool(true), 2))
                 }
             },
             //Int
             3 => {
                 //Read next 8 bytes to get i64 value
                 let value = i64::from_be_bytes(bytes[1..9].try_into().unwrap_or_default());
-                (Self::Int(value), 9)
+                Ok((Self::Int(value), 9))
             },
             //Double
             4 => {
                 //Read next 8 bytes to get f64 value
                 let value = f64::from_be_bytes(bytes[1..9].try_into().unwrap_or_default());
-                (Self::Double(value), 9)
+                Ok((Self::Double(value), 9))
             },
             //Object
             5 => {
                 //Read object from bytes
-                let (obj, len) = Object::decode_from_bytes(&bytes[1..]);
-                (Self::Object(Rc::new(obj)), len + 1)
+                let (obj, len) = Object::decode_from_bytes(&bytes[1..])?;
+                Ok((Self::Object(Rc::new(obj)), len + 1))
             },
             _ => {
                 panic!("Invalid value discriminator {discriminator}.")
@@ -261,19 +261,19 @@ impl Values {
             .collect()
     }
 
-    pub fn decode_from_bytes(bytes: &[u8]) -> Self {
+    pub fn decode_from_bytes(bytes: &[u8]) -> Result<Self, String> {
         let mut values: Vec<Value> = Vec::new();
         let mut offset: usize = 0;
 
         while offset < bytes.len() {
-            let (val, len) = Value::decode_from_bytes(&bytes[offset..]);
+            let (val, len) = Value::decode_from_bytes(&bytes[offset..])?;
             offset += len;
             values.push(val);
         }
 
-        Self {
+        Ok(Self {
             values
-        }
+        })
     }
 }
 
